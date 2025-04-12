@@ -57,11 +57,11 @@ class _AddButtonState extends State<AddButton> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: widget.items.map((item) {
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.only(bottom: 6),
                   child: TextButton(
                     onPressed: () => _handleItemTap(item.onPressed),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.only(left: 12, right: 0, top: 8, bottom: 8),
+                      padding: const EdgeInsets.only(left: 12, right: 0, top: 2, bottom: 8),
                       backgroundColor: Colors.transparent,
                       foregroundColor: Colors.black,
                       minimumSize: Size.zero,
@@ -77,7 +77,7 @@ class _AddButtonState extends State<AddButton> {
                               Text(
                                 item.label,
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w400,
                                   height: 1.4,
                                   letterSpacing: -0.025,
@@ -86,11 +86,11 @@ class _AddButtonState extends State<AddButton> {
                                 textAlign: TextAlign.right,
                               ),
                               if (item.description != null) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 2),
                                 Text(
                                   item.description!,
                                   style: const TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w400,
                                     height: 1.4,
                                     letterSpacing: -0.025,
@@ -104,8 +104,8 @@ class _AddButtonState extends State<AddButton> {
                         ),
                         const SizedBox(width: 12),
                         Container(
-                          width: 56,
-                          height: 56,
+                          width: 52,
+                          height: 52,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white,
@@ -129,8 +129,8 @@ class _AddButtonState extends State<AddButton> {
               }).toList(),
             ),
           Container(
-            width: 56,
-            height: 56,
+            width: 52,
+            height: 52,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: Color(0xFF0062FF),
@@ -147,10 +147,78 @@ class _AddButtonState extends State<AddButton> {
                     child: const Icon(
                       Icons.add,
                       color: Colors.white,
-                      size: 28,
+                      size: 24,
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(AddButtonItem item) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  item.label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    letterSpacing: -0.025,
+                    color: Colors.black,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+                if (item.description != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    item.description!,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      height: 1.4,
+                      letterSpacing: -0.025,
+                      color: Color(0xFF505050),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: Center(
+              child: Image.asset(
+                item.iconPath,
+                width: 24,
+                height: 24,
               ),
             ),
           ),
