@@ -13,13 +13,9 @@ import lombok.Setter;
 @NoArgsConstructor
 public class User {
     @Id
-    private String firebaseUid; // 기본키로 설정
-
+    private String firebaseUid;
     private String username;
     private String email;
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
 
     public User(String firebaseUid, String username, String email) {
         this.firebaseUid = firebaseUid;
