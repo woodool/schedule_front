@@ -39,9 +39,14 @@ class _SignupPageState extends State<SignupPage> {
         _passwordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('모든 필드를 입력해주세요'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
       setState(() => _isLoading = false);
@@ -51,9 +56,14 @@ class _SignupPageState extends State<SignupPage> {
     // 이메일 형식 확인
     if (!_validateEmail(_emailController.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('올바른 이메일 형식이 아닙니다'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
       setState(() => _isLoading = false);
@@ -63,9 +73,14 @@ class _SignupPageState extends State<SignupPage> {
     // 비밀번호 일치 확인
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('비밀번호가 일치하지 않습니다'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
       setState(() => _isLoading = false);
@@ -96,21 +111,60 @@ class _SignupPageState extends State<SignupPage> {
         // 회원가입 성공
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('회원가입이 완료되었습니다'),
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
       } else {
         // 백엔드 에러
         throw Exception('회원가입 실패: ${response.body}');
       }
-    } catch (e) {
-      // 에러 처리
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage = '이미 사용 중인 이메일입니다';
+          break;
+        case 'invalid-email':
+          errorMessage = '유효하지 않은 이메일 형식입니다';
+          break;
+        case 'operation-not-allowed':
+          errorMessage = '이메일/비밀번호 로그인이 비활성화되어 있습니다';
+          break;
+        case 'weak-password':
+          errorMessage = '비밀번호가 너무 약합니다. 더 강력한 비밀번호를 사용해주세요';
+          break;
+        default:
+          errorMessage = '회원가입에 실패했습니다. 다시 시도해주세요';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('회원가입 실패: ${e.toString()}'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('회원가입 중 오류가 발생했습니다. 다시 시도해주세요'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
     } finally {
