@@ -13,8 +13,9 @@ public class WebConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**") // 모든 URL에 대해
-                        .allowedOrigins("http://localhost:3000", "http://localhost:8081") // Flutter 앱 주소
-                        .allowedMethods("*"); // GET, POST, PUT, DELETE 등 모두 허용
+                        .allowedOrigins("*") // 모든 출처 허용
+                        .allowedMethods("*") // GET, POST, PUT, DELETE 등 모두 허용
+                        .allowedHeaders("*"); // 모든 헤더 허용
             }
         };
     }
