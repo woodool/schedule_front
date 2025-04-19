@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 import 'core/theme/app_theme.dart';
 import 'features/schedule/presentation/pages/home_page.dart';
 import 'features/schedule/presentation/pages/add_reminder_page.dart';
@@ -11,7 +14,25 @@ import 'features/schedule/presentation/pages/meeting_page.dart';
 import 'features/schedule/presentation/pages/settings_page.dart';
 import 'features/schedule/presentation/widgets/bottom_nav_bar.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  if (kIsWeb) {
+    await Firebase.initializeApp();
+  } else if (Platform.isAndroid) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: 'AIzaSyAXZ-qsF3YvKm0jsAgnxvrXnEd3J7zwKcs',
+        appId: '1:1014225914940:android:9098b4acb80f9b32f78739',
+        messagingSenderId: '1014225914940',
+        projectId: 'schedule-c3387',
+        storageBucket: 'schedule-c3387.firebasestorage.app',
+      ),
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+  
   runApp(const MyApp());
 }
 
