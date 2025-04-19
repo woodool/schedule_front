@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "74534637147",
+    "project_id": "shcedule04",
+    "storage_bucket": "shcedule04.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74534637147:android:2ec20cac5d86a2e370f97e",
+        "android_client_info": {
+          "package_name": "com.example.schedule"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBk4vbk5Cgjc2Vz1kPUt1acdfqJN88Atc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

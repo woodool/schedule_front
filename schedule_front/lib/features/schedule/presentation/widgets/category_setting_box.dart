@@ -20,6 +20,19 @@ class CategorySettingBox extends StatelessWidget {
     '-',
   ];
 
+  // 카테고리 이름 → 숫자
+  static int getCategoryIdFromName(String name) {
+    final index = categories.indexOf(name);
+    return index != -1 ? index + 1 : categories.length; // 못 찾으면 맨 마지막(-)
+  }
+
+  // 숫자 → 카테고리 이름
+  static String getCategoryNameFromId(int id) {
+    if (id < 1 || id > categories.length) return categories.last;
+    return categories[id - 1]; 
+  }
+
+
   String _getCategoryText() {
     return selectedCategory ?? '-';
   }

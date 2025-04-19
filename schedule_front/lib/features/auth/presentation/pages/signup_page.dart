@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -20,6 +23,65 @@ class _SignupPageState extends State<SignupPage> {
   bool _validateEmail(String email) {
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     return emailRegex.hasMatch(email);
+  }
+
+  // Firebase 인증 후 백엔드로 사용자 정보 보내기
+  Future<void> _signUpUser() async {
+    try {
+      // Firebase 인증을 통해 사용자 생성
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      
+      // Firebase UID를 얻음
+      String firebaseUid = userCredential.user!.uid;
+
+      // 백엔드로 보내기 위한 데이터 준비
+      Map<String, String> userData = {
+        'name': _nameController.text,
+        'email': _emailController.text,
+        'firebase_uid': firebaseUid,
+        'password': _passwordController.text,
+      };
+
+      String apiUrl = 'http://10.0.2.2:8080/api/UserRequestDTO'; 
+
+      // 백엔드로 POST 요청 보내기
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(userData),
+      );
+
+      // 응답 처리
+      if (response.statusCode == 200) {
+        // 회원가입 성공 처리
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('회원가입이 완료되었습니다'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        // 서버에서 오류 처리
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('서버 오류: ${response.body}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Firebase 인증 오류 처리
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('회원가입 실패: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _validateForm() {

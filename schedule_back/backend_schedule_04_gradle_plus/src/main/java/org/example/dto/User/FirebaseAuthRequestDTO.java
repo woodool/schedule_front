@@ -9,4 +9,5 @@ import lombok.Setter;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FirebaseAuthRequestDTO {
     private String idToken;
+    private String fcmToken;
 }

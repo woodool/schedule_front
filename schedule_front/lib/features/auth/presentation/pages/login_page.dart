@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,9 +22,11 @@ class _LoginPageState extends State<LoginPage> {
     return emailRegex.hasMatch(email);
   }
 
-  void _handleLogin() {
-    // 이메일과 비밀번호가 입력되었는지 확인
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+  void _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('이메일과 비밀번호를 입력해주세요'),
@@ -31,8 +36,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // 이메일 형식 확인
-    if (!_validateEmail(_emailController.text)) {
+    if (!_validateEmail(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('올바른 이메일 형식이 아닙니다'),
@@ -42,6 +46,47 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    try {
+      // 1. Firebase 로그인
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        final firebaseUid = user.uid;
+        final userEmail = user.email;
+
+        // 2. 백엔드에 로그인 정보 전달
+        final url = Uri.parse('http://10.0.2.2:8080/api/auth/UserRequestDTO');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'firebaseUid': firebaseUid,
+            'email': userEmail,
+          }),
+        );
+  
+        if (response.statusCode == 200) {
+          // 백엔드 응답에 따라 처리
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('백엔드 로그인 실패: ${response.statusCode}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('로그인 실패: ${e.message}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
     // TODO: 서버/DB 연동 후 실제 로그인 처리 추가
     // 현재는 임시로 홈 화면으로 이동
     // 실제 구현 시에는 아래와 같은 과정이 필요:
@@ -49,8 +94,6 @@ class _LoginPageState extends State<LoginPage> {
     // 2. 서버에서 이메일/비밀번호 검증
     // 3. 성공 시 토큰 등 응답 받기
     // 4. 토큰 저장 후 홈 화면으로 이동
-
-    Navigator.pushReplacementNamed(context, '/home');
   }
 
   @override

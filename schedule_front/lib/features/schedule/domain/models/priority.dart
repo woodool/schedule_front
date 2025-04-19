@@ -8,4 +8,33 @@ enum Priority {
 
   final Color color;
   const Priority(this.color);
+
+  /// DB 숫자 → Priority 변환
+  static Priority fromInt(int value) {
+    switch (value) {
+      case 1:
+        return Priority.high;
+      case 2:
+        return Priority.medium;
+      case 3:
+        return Priority.low;
+      case 4:
+      default:
+        return Priority.none;
+    }
+  }
+
+  /// Priority → DB 숫자 변환
+  int toInt() {
+    switch (this) {
+      case Priority.high:
+        return 1;
+      case Priority.medium:
+        return 2;
+      case Priority.low:
+        return 3;
+      case Priority.none:
+        return 4;
+    }
+  }
 } 

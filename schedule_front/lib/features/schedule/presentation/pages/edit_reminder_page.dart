@@ -4,9 +4,13 @@ import '../widgets/date_time_selector.dart';
 import '../widgets/repeat_setting_box.dart';
 import '../widgets/notification_setting_box.dart';
 import '../widgets/action_buttons.dart';
+import '../../domain/models/notification_helper.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class EditReminderPage extends StatefulWidget {
-  const EditReminderPage({super.key});
+  final int reminderId; 
+  const EditReminderPage({super.key, required this.reminderId});
 
   @override
   State<EditReminderPage> createState() => _EditReminderPageState();
@@ -107,9 +111,38 @@ class _EditReminderPageState extends State<EditReminderPage> {
                 onCancelPressed: () {
                   Navigator.of(context).pop();
                 },
-                onSubmitPressed: () {
-                  // 나중에 DB 연결 시 여기에 리마인더 수정 로직 추가
-                  Navigator.of(context).pop();
+                onSubmitPressed: () async {
+                  final title = _titleController.text.trim();
+                  final start = _startDate.toIso8601String();
+                  final end = _endDate.toIso8601String();
+                  final recurrenceDays = <int>[];
+                  for (int i = 0; i < _selectedDays.length; i++) {
+                    if (_selectedDays[i]) recurrenceDays.add(i);
+                  }
+                  final isRecurring = recurrenceDays.isNotEmpty;
+                  final reminderMinutesBefore = getMinutesFromNotificationType(
+                      _notificationType.name, _customMinutes);
+                  final body = jsonEncode({
+                    'title': title,
+                    'startTime': start,
+                    'endTime': end,
+                    'isRecurring': isRecurring,
+                    'recurrenceDays': recurrenceDays,
+                    'reminderMinutesBefore': reminderMinutesBefore,
+                  });
+                  final response = await http.put(
+                    Uri.parse('http://10.0.2.2:8080/api/reminders/${widget.reminderId}'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: body,
+                  );
+                  if (response.statusCode == 200) {
+                    Navigator.of(context).pop();
+                  } else {
+                    print('리마인더 수정 실패: ${response.body}');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('리마인더 수정에 실패했습니다.')),
+                    );
+                  }
                 },
                 cancelText: '취소',
                 submitText: '수정',
