@@ -1,5 +1,6 @@
 package org.example.controller.Reminder;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.context.UserContext;
 import org.example.dto.Reminder.UpdateReminderDTO;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class UpdateReminderController {
     private final ReminderService reminderService;
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateReminder(@PathVariable("id") Long reminderId, @RequestBody UpdateReminderDTO dto) {
+    public ResponseEntity<?> updateReminder(@PathVariable("id") Long reminderId, @Valid @RequestBody UpdateReminderDTO dto) {
         String firebaseUid = UserContext.getFirebaseUid();
 
         if (firebaseUid == null) {

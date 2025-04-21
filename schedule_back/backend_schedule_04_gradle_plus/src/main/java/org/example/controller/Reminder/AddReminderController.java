@@ -1,5 +1,6 @@
 package org.example.controller.Reminder;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.Reminder.AddReminderDTO;
 import org.example.context.UserContext;
@@ -17,7 +18,7 @@ public class AddReminderController {
     private final ReminderService reminderService;
 
     @PostMapping
-    public ResponseEntity<?> addReminder(@RequestBody AddReminderDTO dto) {
+    public ResponseEntity<?> addReminder(@Valid @RequestBody AddReminderDTO dto) {
         String firebaseUid = UserContext.getFirebaseUid();
 
         if (firebaseUid == null) {

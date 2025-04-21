@@ -17,22 +17,18 @@ import org.springframework.web.bind.annotation.*;
 public class RegisterController {
     private final UserService userService;
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody FirebaseAuthRequestDTO request) {
+    public ResponseEntity<?> register(@RequestBody FirebaseAuthRequestDTO request) throws FirebaseAuthException {
         String idToken = request.getIdToken();
-        try {
-            FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
-            String firebaseUid = decodedToken.getUid();
-            String email = decodedToken.getEmail();
+        FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
+        String firebaseUid = decodedToken.getUid();
+        String email = decodedToken.getEmail();
 
-            UserRecord userRecord = FirebaseAuth.getInstance().getUser(firebaseUid);
-            String username = userRecord.getDisplayName();
+        UserRecord userRecord = FirebaseAuth.getInstance().getUser(firebaseUid);
+        String username = userRecord.getDisplayName();
 
-            userService.registerUser(firebaseUid, email, username, request.getFcmToken());
+        userService.registerUser(firebaseUid, email, username, request.getFcmToken());
 
-            return ResponseEntity.ok("회원가입 완료");
-        } catch (FirebaseAuthException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("회원가입 실패: " + e.getMessage());
-        }
+        return ResponseEntity.ok("회원가입 완료");
     }
 }
 

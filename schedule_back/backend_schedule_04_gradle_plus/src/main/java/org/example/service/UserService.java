@@ -11,12 +11,22 @@ public class UserService {
     private final UserRepository userRepository;
 
     public void registerUser(String uid, String email, String username, String fcmToken) {
-        // DB에 이미 유저가 있는지 확인 후 저장
+        if (userRepository.existsByFirebaseUid(uid)) {
+            throw new IllegalStateException("이미 회원가입된 유저입니다.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalStateException("이미 등록된 이메일입니다.");
+        }
         if (!userRepository.existsByFirebaseUid(uid)) {
             User user = new User(uid, email, username);
             user.setFcmToken(fcmToken);
             userRepository.save(user);
         }
+    }
+
+    // 이메일 중복 체크 메서드
+    public boolean isEmailAlreadyRegistered(String email) {
+        return userRepository.existsByEmail(email);
     }
 
     public User loginUser(String uid, String fcmToken) {

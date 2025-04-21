@@ -1,5 +1,6 @@
 package org.example.controller.Schedule;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.Schedule.AddScheduleDTO;
 import org.example.context.UserContext;
@@ -17,7 +18,7 @@ public class AddScheduleController {
     private final ScheduleService scheduleService;
 
     @PostMapping
-    public ResponseEntity<?> addSchedule(@RequestBody AddScheduleDTO dto) {
+    public ResponseEntity<?> addSchedule(@Valid @RequestBody AddScheduleDTO dto) {
         String firebaseUid = UserContext.getFirebaseUid();
 
         if (firebaseUid == null) {

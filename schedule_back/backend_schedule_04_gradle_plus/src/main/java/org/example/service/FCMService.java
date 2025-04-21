@@ -14,7 +14,24 @@ import java.util.Map;
 @Service
 public class FCMService {
 
-    private final Firestore firestore = FirestoreClient.getFirestore();
+    private static FCMService instance;
+    private final Firestore firestore;
+
+    // 싱글톤 인스턴스를 안전하게 생성하는 방법
+    private FCMService() {
+        this.firestore = FirestoreClient.getFirestore();
+    }
+
+    public static FCMService getInstance() {
+        if (instance == null) {
+            synchronized (FCMService.class) {
+                if (instance == null) {
+                    instance = new FCMService();
+                }
+            }
+        }
+        return instance;
+    }
 
     public void scheduleNotification(String fcmToken, String title, String body, Timestamp firebaseTimestamp) {
         Map<String, Object> notificationData = new HashMap<>();

@@ -21,6 +21,13 @@ public class ScheduleService {
     private final UserRepository userRepository;
 
     public void addSchedule(AddScheduleDTO dto, String firebaseUid) {
+        if (dto.getStartTime().isAfter(dto.getEndTime())) {
+            throw new IllegalArgumentException("시작 시간이 종료 시간보다 늦을 수 없습니다.");
+        }
+        if (dto.getEndTime().isBefore(dto.getStartTime())) {
+            throw new IllegalArgumentException("종료 시간이 시작 시간보다 빠를 수 없습니다.");
+        }
+
         Schedule schedule = new Schedule(dto, firebaseUid);
         scheduleRepository.save(schedule);
 
@@ -31,7 +38,7 @@ public class ScheduleService {
             LocalDateTime reminderTime = dto.getReminderTime();
             Date date = Date.from(reminderTime.atZone(ZoneId.systemDefault()).toInstant());
             Timestamp firebaseTimestamp = Timestamp.of(date);
-            FCMService notifier = new FCMService();
+            FCMService notifier = FCMService.getInstance();
             notifier.scheduleNotification(targetToken, title, "", firebaseTimestamp);
         });
     }
@@ -42,6 +49,13 @@ public class ScheduleService {
 
         if (!existingSchedule.getFirebaseUid().equals(firebaseUid)) {
             throw new RuntimeException("수정 권한이 없습니다.");
+        }
+
+        if (dto.getStartTime().isAfter(dto.getEndTime())) {
+            throw new IllegalArgumentException("시작 시간이 종료 시간보다 늦을 수 없습니다.");
+        }
+        if (dto.getEndTime().isBefore(dto.getStartTime())) {
+            throw new IllegalArgumentException("종료 시간이 시작 시간보다 빠를 수 없습니다.");
         }
 
         existingSchedule.setTitle(dto.getTitle());
@@ -64,7 +78,7 @@ public class ScheduleService {
             LocalDateTime reminderTime = dto.getReminderTime();
             Date date = Date.from(reminderTime.atZone(ZoneId.systemDefault()).toInstant());
             Timestamp firebaseTimestamp = Timestamp.of(date);
-            FCMService notifier = new FCMService();
+            FCMService notifier = FCMService.getInstance();
             notifier.scheduleNotification(targetToken, title, "", firebaseTimestamp);
         });
     }

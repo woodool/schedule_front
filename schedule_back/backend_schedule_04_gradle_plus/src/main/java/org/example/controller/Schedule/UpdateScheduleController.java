@@ -1,5 +1,6 @@
 package org.example.controller.Schedule;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.context.UserContext;
 import org.example.dto.Schedule.UpdateScheduleDTO;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class UpdateScheduleController {
     private final ScheduleService scheduleService;
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateSchedule(@PathVariable("id") Long scheduleId, @RequestBody UpdateScheduleDTO dto) {
+    public ResponseEntity<?> updateSchedule(@PathVariable("id") Long scheduleId, @Valid @RequestBody UpdateScheduleDTO dto) {
         String firebaseUid = UserContext.getFirebaseUid();
 
         if (firebaseUid == null) {
