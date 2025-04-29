@@ -9,6 +9,8 @@ import '../widgets/memo_input.dart';
 import '../widgets/calendar_display_selector.dart';
 import '../widgets/action_buttons.dart';
 import '../../domain/models/priority.dart';
+import '../../domain/models/schedule.dart';
+import '../../domain/services/schedule_service.dart';
 
 class AddSchedulePage extends StatefulWidget {
   const AddSchedulePage({super.key});
@@ -25,9 +27,12 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   List<bool> _selectedDays = [false, false, false, false, false, false, false];
   NotificationType _notificationType = NotificationType.none;
   int? _customMinutes;
-  String _selectedCategory = '-';  // 기본값 설정
+  String _selectedCategory = '-';
+  int? _categoryId;
   Priority? _selectedPriority;
-  CalendarDisplayType _calendarDisplayType = CalendarDisplayType.show; // 기본값은 달력 표시
+  CalendarDisplayType _calendarDisplayType = CalendarDisplayType.show;
+  String? _recurrenceDays;
+  final ScheduleService _scheduleService = ScheduleService();
 
   @override
   void dispose() {
@@ -36,135 +41,176 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     super.dispose();
   }
 
+  Future<void> _saveSchedule() async {
+    if (_titleController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('제목을 입력해주세요')),
+      );
+      return;
+    }
+
+    try {
+      final schedule = Schedule(
+        title: _titleController.text,
+        description: _contentController.text,
+        startTime: _startDate,
+        endTime: _endDate,
+        categoryId: _categoryId,
+        priority: _selectedPriority?.value,
+        displayOnCalendar: _calendarDisplayType == CalendarDisplayType.show,
+        reminderMinutesBefore: _customMinutes,
+        recurrenceDays: _recurrenceDays,
+      );
+
+      await _scheduleService.createSchedule(schedule);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정이 성공적으로 등록되었습니다.')),
+        );
+        Navigator.of(context).pop(true); // ✅ 등록 성공했다는 표시
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('일정 저장 실패: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      TitleInput(
-                        controller: _titleController,
-                        onChanged: (value) {
-                          // TODO: 제목 변경 처리
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          DateTimeSelector(
-                            startDate: _startDate,
-                            endDate: _endDate,
-                            onStartDateChanged: (date) {
-                              setState(() {
-                                _startDate = date;
-                              });
-                            },
-                            onEndDateChanged: (date) {
-                              setState(() {
-                                _endDate = date;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          RepeatSettingBox(
-                            selectedDays: _selectedDays,
-                            onDaysChanged: (days) {
-                              setState(() {
-                                _selectedDays = days;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 35),
-                          NotificationSettingBox(
-                            notificationType: _notificationType,
-                            customMinutes: _customMinutes,
-                            onTypeChanged: (type) {
-                              setState(() {
-                                _notificationType = type;
-                              });
-                            },
-                            onCustomMinutesChanged: (minutes) {
-                              setState(() {
-                                _customMinutes = minutes;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CategorySettingBox(
-                            selectedCategory: _selectedCategory,
-                            onCategoryChanged: (category) {
-                              setState(() {
-                                _selectedCategory = category;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 35),
-                          PrioritySettingBox(
-                            selectedPriority: _selectedPriority,
-                            onPriorityChanged: (priority) {
-                              setState(() {
-                                _selectedPriority = priority;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      MemoInput(
-                        controller: _contentController,
-                        onChanged: (value) {
-                          // TODO: 메모 변경 처리
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                      CalendarDisplaySelector(
-                        selectedType: _calendarDisplayType,
-                        onTypeSelected: (type) {
-                          setState(() {
-                            _calendarDisplayType = type;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    TitleInput(
+                      controller: _titleController,
+                      onChanged: (value) {},
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        DateTimeSelector(
+                          startDate: _startDate,
+                          endDate: _endDate,
+                          onStartDateChanged: (date) {
+                            setState(() {
+                              _startDate = date;
+                            });
+                          },
+                          onEndDateChanged: (date) {
+                            setState(() {
+                              _endDate = date;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        RepeatSettingBox(
+                          selectedDays: _selectedDays,
+                          onDaysChanged: (days) {
+                            setState(() {
+                              _selectedDays = days;
+                            });
+                          },
+                          onRecurrenceDaysChanged: (days) {
+                            setState(() {
+                              _recurrenceDays = days;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 35),
+                        NotificationSettingBox(
+                          notificationType: _notificationType,
+                          customMinutes: _customMinutes,
+                          onTypeChanged: (type) {
+                            setState(() {
+                              _notificationType = type;
+                            });
+                          },
+                          onCustomMinutesChanged: (minutes) {
+                            setState(() {
+                              _customMinutes = minutes;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CategorySettingBox(
+                          selectedCategory: _selectedCategory,
+                          onCategoryChanged: (category) {
+                            setState(() {
+                              _selectedCategory = category;
+                            });
+                          },
+                          onCategoryIdChanged: (id) {
+                            setState(() {
+                              _categoryId = id;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 35),
+                        PrioritySettingBox(
+                          selectedPriority: _selectedPriority,
+                          onPriorityChanged: (priority) {
+                            setState(() {
+                              _selectedPriority = priority;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    MemoInput(
+                      controller: _contentController,
+                      onChanged: (value) {},
+                    ),
+                    const SizedBox(height: 32),
+                    CalendarDisplaySelector(
+                      selectedType: _calendarDisplayType,
+                      onTypeSelected: (type) {
+                        setState(() {
+                          _calendarDisplayType = type;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 100),
+                  ],
                 ),
               ),
-            ),
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: ActionButtons(
-                onCancelPressed: () {
-                  Navigator.of(context).pop();
-                },
-                onSubmitPressed: () {
-                  // 나중에 DB 연결 시 여기에 일정 저장 로직 추가
-                  Navigator.of(context).pop();
-                },
-              ),
-            ),
-          ],
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: ActionButtons(
+          onCancelPressed: () {
+            Navigator.of(context).pop();
+          },
+          onSubmitPressed: _saveSchedule,
         ),
       ),
     );
   }
-} 
+}

@@ -1,17 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 import 'core/theme/app_theme.dart';
 import 'features/schedule/presentation/pages/home_page.dart';
 import 'features/schedule/presentation/pages/add_reminder_page.dart';
 import 'features/schedule/presentation/pages/add_schedule_page.dart';
+import 'features/schedule/presentation/pages/edit_reminder_page.dart';
+import 'features/schedule/presentation/pages/edit_schedule_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/signup_page.dart';
 import 'features/schedule/presentation/pages/calendar_page.dart';
 import 'features/schedule/presentation/pages/meeting_page.dart';
 import 'features/schedule/presentation/pages/settings_page.dart';
 import 'features/schedule/presentation/widgets/bottom_nav_bar.dart';
+import 'features/schedule/domain/models/reminder.dart';
+import 'features/schedule/domain/models/schedule.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  if (kIsWeb) {
+    await Firebase.initializeApp();
+  } else if (Platform.isAndroid) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: 'AIzaSyAXZ-qsF3YvKm0jsAgnxvrXnEd3J7zwKcs',
+        appId: '1:1014225914940:android:9098b4acb80f9b32f78739',
+        messagingSenderId: '1014225914940',
+        projectId: 'schedule-c3387',
+        storageBucket: 'schedule-c3387.firebasestorage.app',
+      ),
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+  
   runApp(const MyApp());
 }
 
@@ -39,6 +65,14 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const MainScreen(),
         '/add_reminder': (context) => const AddReminderPage(),
         '/add_schedule': (context) => const AddSchedulePage(),
+        '/edit_reminder': (context) {
+          final reminder = ModalRoute.of(context)!.settings.arguments as Reminder;
+          return EditReminderPage(reminder: reminder);
+        },
+        '/edit_schedule': (context) {
+          final schedule = ModalRoute.of(context)!.settings.arguments as Schedule;
+          return EditSchedulePage(schedule: schedule);
+        },
       },
     );
   }
@@ -54,12 +88,18 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
     const HomePage(),
     const CalendarPage(),
     const MeetingPage(),
     const SettingsPage(),
   ];
+  }
 
   @override
   Widget build(BuildContext context) {

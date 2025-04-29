@@ -3,14 +3,29 @@ import 'package:flutter/material.dart';
 class RepeatSettingBox extends StatelessWidget {
   final List<bool> selectedDays;
   final ValueChanged<List<bool>>? onDaysChanged;
+  final ValueChanged<String?>? onRecurrenceDaysChanged;
 
   const RepeatSettingBox({
     super.key,
     required this.selectedDays,
     this.onDaysChanged,
+    this.onRecurrenceDaysChanged,
   });
 
   static const List<String> weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+
+  String? _getRecurrenceDays(List<bool> days) {
+    String recurrenceDays = '';
+    for (int i = 0; i < days.length; i++) {
+      if (days[i]) {
+        if (recurrenceDays.isNotEmpty) {
+          recurrenceDays += ',';
+        }
+        recurrenceDays += (i + 1).toString(); // 1부터 시작 (월요일)
+      }
+    }
+    return recurrenceDays.isEmpty ? null : recurrenceDays;
+  }
 
   String _getSelectedDaysText([List<bool>? days]) {
     final targetDays = days ?? selectedDays;
@@ -121,6 +136,7 @@ class RepeatSettingBox extends StatelessWidget {
                 TextButton(
                   onPressed: () {
                     onDaysChanged?.call(tempSelectedDays);
+                    onRecurrenceDaysChanged?.call(_getRecurrenceDays(tempSelectedDays));
                     Navigator.of(context).pop();
                   },
                   child: Text('확인'),

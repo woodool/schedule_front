@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GradleMigrationSettings" migrationVersion="1" />
+  <component name="GradleSettings">
+    <option name="linkedExternalProjectsSettings">
+      <GradleProjectSettings>
+        <option name="externalProjectPath" value="$PROJECT_DIR$/backend_schedule_04_gradle_plus" />
+        <option name="gradleHome" value="$PROJECT_DIR$/../../Program Files/Gradle/gradle-8.11.1" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$/backend_schedule_04_gradle_plus" />
+          </set>
+        </option>
+      </GradleProjectSettings>
+    </option>
+  </component>
+</project>

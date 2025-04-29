@@ -4,11 +4,13 @@ import 'package:flutter/cupertino.dart';
 class CategorySettingBox extends StatelessWidget {
   final String? selectedCategory;
   final ValueChanged<String>? onCategoryChanged;
+  final ValueChanged<int?>? onCategoryIdChanged;
 
   const CategorySettingBox({
     super.key,
     this.selectedCategory,
     this.onCategoryChanged,
+    this.onCategoryIdChanged,
   });
 
   static const List<String> categories = [
@@ -19,6 +21,25 @@ class CategorySettingBox extends StatelessWidget {
     '취미',
     '-',
   ];
+
+  int? _getCategoryId(String category) {
+  switch (category) {
+    case '업무':
+      return 14;
+    case '학업':
+      return 15;
+    case '약속':
+      return 16;
+    case '운동':
+      return 17;
+    case '취미':
+      return 18;
+    case '-':
+      return 19;
+    default:
+      return null;
+  }
+}
 
   String _getCategoryText() {
     return selectedCategory ?? '-';
@@ -74,10 +95,7 @@ class CategorySettingBox extends StatelessWidget {
                             return Center(
                               child: Text(
                                 category,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  color: Colors.black,
-                                ),
+                                style: TextStyle(fontSize: 20),
                               ),
                             );
                           }).toList(),
@@ -95,6 +113,7 @@ class CategorySettingBox extends StatelessWidget {
                 TextButton(
                   onPressed: () {
                     onCategoryChanged?.call(tempCategory);
+                    onCategoryIdChanged?.call(_getCategoryId(tempCategory));
                     Navigator.of(context).pop();
                   },
                   child: Text('확인'),

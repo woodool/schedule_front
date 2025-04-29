@@ -10,7 +10,9 @@ class AddScheduleButton extends StatelessWidget {
       onPressed: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const AddSchedulePage()),
+          MaterialPageRoute(
+            builder: (context) => const AddSchedulePage(),
+          ),
         );
       },
       tooltip: '일정 추가',
