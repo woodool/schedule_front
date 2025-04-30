@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../../../core/config/api_config.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -102,8 +103,7 @@ class _SignupPageState extends State<SignupPage> {
 
       // 백엔드 API 호출
       final response = await http.post(
-        // Uri.parse('http://192.168.219.101:8080/api/auth/register'), // 기숙사
-        Uri.parse('http://172.16.7.130:8080/api/auth/register'), // 303호
+        Uri.parse(ApiConfig.authRegisterEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'username': _nameController.text,

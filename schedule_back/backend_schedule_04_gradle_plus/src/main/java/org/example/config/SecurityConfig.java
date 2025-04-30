@@ -46,7 +46,9 @@ public class SecurityConfig {
             "http://192.168.219.101:8080", // 기숙사
             "http://192.168.219.101",
             "http://172.16.7.130:8080", // 303호
-            "http://172.16.7.130"
+            "http://172.16.7.130",
+            "http://192.168.219.101:8080", // 기숙사 노트북실실
+            "http://192.168.219.101"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));

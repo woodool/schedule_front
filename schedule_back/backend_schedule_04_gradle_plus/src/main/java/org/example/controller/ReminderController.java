@@ -33,4 +33,10 @@ public class ReminderController {
         reminderService.deleteReminder(id, firebaseUid);
         return ResponseEntity.ok().build();
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ReminderDTO> updateReminder(@PathVariable Long id, @RequestBody ReminderDTO reminderDTO, Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        return ResponseEntity.ok(reminderService.updateReminder(id, reminderDTO, firebaseUid));
+    }
 } 

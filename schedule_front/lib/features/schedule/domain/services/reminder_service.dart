@@ -2,10 +2,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/reminder.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../../core/config/api_config.dart';
 
 class ReminderService {
-  // static const String baseUrl = 'http://192.168.219.101:8080/api/reminders'; // 기숙사
-  static const String baseUrl = 'http://172.16.7.130:8080/api/reminders'; // 303호
+  // 중앙화된 API 설정 사용
 
   Future<List<Reminder>> getReminders() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -14,7 +14,7 @@ class ReminderService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.get(
-      Uri.parse(baseUrl),
+      Uri.parse(ApiConfig.remindersEndpoint),
       headers: {
         'Authorization': 'Bearer $idToken',
       },
@@ -35,7 +35,7 @@ class ReminderService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.post(
-      Uri.parse(baseUrl),
+      Uri.parse(ApiConfig.remindersEndpoint),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $idToken',
@@ -55,10 +55,15 @@ class ReminderService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
 
+    // reminderId가 null이면 예외 발생
+    if (reminder.reminderId == null) {
+      throw Exception('리마인더 ID가 없습니다');
+    }
+
     final idToken = await user.getIdToken(true);
 
     final response = await http.put(
-      Uri.parse('$baseUrl/${reminder.reminderId}'),
+      Uri.parse(ApiConfig.reminderById(reminder.reminderId.toString())),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $idToken',
@@ -80,7 +85,7 @@ class ReminderService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.delete(
-      Uri.parse('$baseUrl/$reminderId'),
+      Uri.parse(ApiConfig.reminderById(reminderId)),
       headers: {
         'Authorization': 'Bearer $idToken',
       },

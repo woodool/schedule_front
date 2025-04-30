@@ -73,6 +73,11 @@ public class ReminderService {
         reminder.setEndTime(reminderDTO.getEndTime());
         reminder.setRecurrenceDays(reminderDTO.getRecurrenceDays());
         reminder.setReminderMinutesBefore(reminderDTO.getReminderMinutesBefore());
+        
+        // isActive 필드 업데이트 코드 추가
+        if (reminderDTO.getIsActive() != null) {
+            reminder.setIsActive(reminderDTO.getIsActive());
+        }
 
         Integer reminderMinutesBefore = reminderDTO.getReminderMinutesBefore() != null ? reminderDTO.getReminderMinutesBefore() : 0;
         LocalDateTime reminderTime = reminderDTO.getStartTime() != null

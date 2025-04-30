@@ -2,10 +2,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/schedule.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../../core/config/api_config.dart';
 
 class ScheduleService {
-  // static const String baseUrl = 'http://192.168.219.101:8080/api/schedules'; // 기숙사
-  static const String baseUrl = 'http://172.16.7.130:8080/api/schedules'; // 303호
+  // 중앙화된 API 설정 사용
 
   Future<List<Schedule>> getSchedules() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -14,7 +14,7 @@ class ScheduleService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.get(
-      Uri.parse(baseUrl),
+      Uri.parse(ApiConfig.schedulesEndpoint),
       headers: {
         'Authorization': 'Bearer $idToken',
       },
@@ -35,7 +35,7 @@ class ScheduleService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.post(
-      Uri.parse(baseUrl),
+      Uri.parse(ApiConfig.schedulesEndpoint),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $idToken',
@@ -57,7 +57,7 @@ class ScheduleService {
     final idToken = await user.getIdToken(true);
 
     final response = await http.put(
-      Uri.parse('$baseUrl/${schedule.scheduleId}'),
+      Uri.parse(ApiConfig.scheduleById(schedule.scheduleId.toString())),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $idToken',
