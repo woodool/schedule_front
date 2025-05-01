@@ -3,6 +3,7 @@ package org.example.controller;
 import lombok.RequiredArgsConstructor;
 import org.example.dto.PostponeRequestDTO;
 import org.example.dto.ScheduleDTO;
+import org.example.entity.User;
 import org.example.service.ScheduleService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -43,9 +44,13 @@ public class ScheduleController {
     }
 
     @DeleteMapping("/{scheduleId}")
-    public ResponseEntity<Void> deleteSchedule(@PathVariable Long scheduleId, Authentication authentication) {
-        String firebaseUid = authentication.getName();
-        scheduleService.deleteSchedule(scheduleId, firebaseUid);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> deleteSchedule(@PathVariable Long scheduleId, Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            scheduleService.deleteSchedule(scheduleId, firebaseUid);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

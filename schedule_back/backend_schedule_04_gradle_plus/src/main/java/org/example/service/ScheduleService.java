@@ -42,6 +42,7 @@ public class ScheduleService {
                 ? scheduleDTO.getStartTime().minusMinutes(reminderMinutesBefore)
                 : LocalDateTime.now();
 
+
         // 인증받은 사용자의 firebaseUid를 엔티티에 세팅하여, 수정 시 권한체크에 사용한다.
         Schedule schedule = Schedule.builder()
                 .title(scheduleDTO.getTitle())

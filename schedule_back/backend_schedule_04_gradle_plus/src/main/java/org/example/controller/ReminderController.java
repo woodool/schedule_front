@@ -28,10 +28,14 @@ public class ReminderController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteReminder(@PathVariable Long id, Authentication authentication) {
-        String firebaseUid = authentication.getName();
-        reminderService.deleteReminder(id, firebaseUid);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> deleteReminder(@PathVariable Long id, Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            reminderService.deleteReminder(id, firebaseUid);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PutMapping("/{id}")
