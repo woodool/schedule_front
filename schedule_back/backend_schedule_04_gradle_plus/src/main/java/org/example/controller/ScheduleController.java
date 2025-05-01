@@ -29,7 +29,7 @@ public class ScheduleController {
         return ResponseEntity.ok(scheduleService.createSchedule(scheduleDTO, firebaseUid));
     }
 
-    @PutMapping("/{scheduleId}")
+    @PutMapping("/{scheduleId}/postpone")
     public ResponseEntity<ScheduleDTO> postponeScheduleReminder(@PathVariable Long scheduleId, @RequestBody PostponeRequestDTO request, Authentication authentication) {
         String firebaseUid = authentication.getName();
         return ResponseEntity.ok(scheduleService.postponeScheduleReminder(scheduleId, firebaseUid, request));
