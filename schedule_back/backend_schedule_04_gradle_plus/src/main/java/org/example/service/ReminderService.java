@@ -9,6 +9,7 @@ import org.example.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,6 +50,8 @@ public class ReminderService {
                 .reminderMinutesBefore(reminderMinutesBefore)
                 .reminderTime(calculatedReminderTime)
                 .isActive(true)
+                .recurrenceStartDate(reminderDTO.getRecurrenceStartDate())
+                .recurrenceEndDate(reminderDTO.getRecurrenceEndDate())
                 .user(user)
                 .build();
 
@@ -73,6 +76,8 @@ public class ReminderService {
         reminder.setEndTime(reminderDTO.getEndTime());
         reminder.setRecurrenceDays(reminderDTO.getRecurrenceDays());
         reminder.setReminderMinutesBefore(reminderDTO.getReminderMinutesBefore());
+        reminder.setRecurrenceStartDate(reminderDTO.getRecurrenceStartDate());
+        reminder.setRecurrenceEndDate(reminderDTO.getRecurrenceEndDate());
         
         // isActive 필드 업데이트 코드 추가
         if (reminderDTO.getIsActive() != null) {
@@ -101,5 +106,50 @@ public class ReminderService {
         }
 
         reminderRepository.delete(reminder);
+    }
+    
+    @Transactional
+    public void excludeOccurrence(Long reminderId, LocalDateTime excludeDate, String firebaseUid) {
+        User user = userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        Reminder reminder = reminderRepository.findById(reminderId)
+                .orElseThrow(() -> new RuntimeException("리마인더를 찾을 수 없습니다."));
+
+        // 권한 검증
+        if (!reminder.getUser().getFirebaseUid().equals(firebaseUid)) {
+            throw new RuntimeException("권한이 없습니다.");
+        }
+        
+        // 반복 일정이 아니면 예외 발생
+        if (reminder.getRecurrenceDays() == null || reminder.getRecurrenceDays().isEmpty() 
+                || "0,0,0,0,0,0,0".equals(reminder.getRecurrenceDays())) {
+            throw new RuntimeException("반복 리마인더가 아닙니다.");
+        }
+        
+        // 날짜만 추출 (시간 제외)
+        LocalDate excludeDateOnly = excludeDate.toLocalDate();
+        
+        // 제외할 날짜의 요일이 반복 요일에 포함되는지 확인
+        int dayOfWeek = excludeDateOnly.getDayOfWeek().getValue(); // 1(월) ~ 7(일)
+        if (!reminder.getRecurrenceDays().contains(String.valueOf(dayOfWeek))) {
+            throw new RuntimeException("제외할 날짜가 반복 요일에 포함되지 않습니다.");
+        }
+        
+        // 제외된 날짜 목록 가져오기 및 업데이트
+        String excludedDates = reminder.getExcludedDates();
+        String excludeDateStr = excludeDateOnly.toString();
+        
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            // 첫 번째 제외 날짜인 경우
+            reminder.setExcludedDates(excludeDateStr);
+        } else {
+            // 이미 제외 날짜가 있는 경우
+            if (!excludedDates.contains(excludeDateStr)) {
+                reminder.setExcludedDates(excludedDates + "," + excludeDateStr);
+            }
+        }
+        
+        reminderRepository.save(reminder);
     }
 }

@@ -34,6 +34,8 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
   Priority? _selectedPriority;
   CalendarDisplayType _calendarDisplayType = CalendarDisplayType.show;
   String? _recurrenceDays;
+  DateTime? _recurrenceStartDate;
+  DateTime? _recurrenceEndDate;
   final ScheduleService _scheduleService = ScheduleService();
 
   @override
@@ -43,6 +45,8 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
   }
 
   void _initializeFields() {
+    print('일정 수정 초기화 - ID: ${widget.schedule.scheduleId}');
+    
     _titleController.text = widget.schedule.title;
     _contentController.text = widget.schedule.description ?? '';
     _startDate = widget.schedule.startTime;
@@ -53,13 +57,67 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
         ? CalendarDisplayType.show 
         : CalendarDisplayType.hide;
     _customMinutes = widget.schedule.reminderMinutesBefore;
-    _recurrenceDays = widget.schedule.recurrenceDays;
-    _notificationType = _customMinutes != null ? NotificationType.custom : NotificationType.none;
+    _recurrenceStartDate = widget.schedule.recurrenceStartDate;
+    _recurrenceEndDate = widget.schedule.recurrenceEndDate;
     
-    if (widget.schedule.recurrenceDays != null) {
-      final days = widget.schedule.recurrenceDays!.split(',');
-      for (int i = 0; i < days.length; i++) {
-        _selectedDays[i] = days[i] == '1';
+    // 카테고리 정보 초기화
+    if (_categoryId != null) {
+      // 카테고리 ID에 따른 이름 설정
+      switch (_categoryId) {
+        case 14:
+          _selectedCategory = '업무';
+          break;
+        case 15:
+          _selectedCategory = '학업';
+          break;
+        case 16:
+          _selectedCategory = '약속';
+          break;
+        case 17:
+          _selectedCategory = '운동';
+          break;
+        case 18:
+          _selectedCategory = '취미';
+          break;
+        case 19:
+          _selectedCategory = '-';
+          break;
+        default:
+          _selectedCategory = '-';
+      }
+      print('카테고리 초기화: ID=$_categoryId, 이름=$_selectedCategory');
+    }
+    
+    // 알림 타입 설정
+    if (widget.schedule.reminderMinutesBefore != null) {
+      final minutes = widget.schedule.reminderMinutesBefore!;
+      if (minutes == 10) {
+        _notificationType = NotificationType.tenMinutes;
+      } else if (minutes == 60) {
+        _notificationType = NotificationType.oneHour;
+      } else if (minutes == 1440) { // 24시간 (1일)
+        _notificationType = NotificationType.oneDay;
+      } else if (minutes > 0) {
+        _notificationType = NotificationType.custom;
+        _customMinutes = minutes;
+      } else {
+        _notificationType = NotificationType.none;
+      }
+      print('알림 설정 초기화: 분=$minutes, 타입=$_notificationType');
+    } else {
+      _notificationType = NotificationType.none;
+    }
+    
+    // 반복 설정
+    _recurrenceDays = widget.schedule.recurrenceDays;
+    if (_recurrenceDays != null && _recurrenceDays!.isNotEmpty) {
+      print('반복 설정: $_recurrenceDays');
+      final days = _recurrenceDays!.split(',');
+      if (days.length == 7) {
+        for (int i = 0; i < 7; i++) {
+          _selectedDays[i] = days[i] == '1';
+        }
+        print('선택된 요일: $_selectedDays');
       }
     }
   }
@@ -80,6 +138,7 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
     }
 
     try {
+      print('일정 수정 요청 - 원본 ID: ${widget.schedule.scheduleId}');
       final schedule = Schedule(
         scheduleId: widget.schedule.scheduleId,
         title: _titleController.text,
@@ -90,8 +149,11 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
         priority: _selectedPriority?.value,
         displayOnCalendar: _calendarDisplayType == CalendarDisplayType.show,
         reminderMinutesBefore: _customMinutes,
-        recurrenceDays: _recurrenceDays,
+        recurrenceDays: _selectedDays.map((selected) => selected ? '1' : '0').join(','),
+        recurrenceStartDate: _recurrenceStartDate,
+        recurrenceEndDate: _recurrenceEndDate,
       );
+      print('수정할 일정 데이터: ${schedule.toJson()}');
 
       await _scheduleService.updateSchedule(schedule);
       if (mounted) {
@@ -160,6 +222,18 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
                               _recurrenceDays = days;
                             });
                           },
+                          recurrenceStartDate: _recurrenceStartDate,
+                          recurrenceEndDate: _recurrenceEndDate,
+                          onRecurrenceStartDateChanged: (date) {
+                            setState(() {
+                              _recurrenceStartDate = date;
+                            });
+                          },
+                          onRecurrenceEndDateChanged: (date) {
+                            setState(() {
+                              _recurrenceEndDate = date;
+                            });
+                          },
                         ),
                         const SizedBox(width: 35),
                         NotificationSettingBox(
@@ -184,6 +258,7 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
                       children: [
                         CategorySettingBox(
                           selectedCategory: _selectedCategory,
+                          categoryId: _categoryId,
                           onCategoryChanged: (category) {
                             setState(() {
                               _selectedCategory = category;
@@ -242,3 +317,4 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
     );
   }
 }
+

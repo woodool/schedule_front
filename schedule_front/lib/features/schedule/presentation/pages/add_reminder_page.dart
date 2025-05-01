@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/title_input.dart';
-import '../widgets/date_time_selector.dart';
 import '../widgets/repeat_setting_box.dart';
 import '../widgets/notification_setting_box.dart';
 import '../widgets/action_buttons.dart';
@@ -21,6 +20,8 @@ class _AddReminderPageState extends State<AddReminderPage> {
   List<bool> _selectedDays = [false, false, false, false, false, false, false];
   NotificationType _notificationType = NotificationType.none;
   int? _customMinutes;
+  DateTime? _recurrenceStartDate;
+  DateTime? _recurrenceEndDate;
   final ReminderService _reminderService = ReminderService();
 
   @override
@@ -38,12 +39,19 @@ class _AddReminderPageState extends State<AddReminderPage> {
     }
 
     try {
+      // 날짜 및 시간을 현재 시간으로 자동 설정
+      final now = DateTime.now();
+      _startDate = now;
+      _endDate = now.add(const Duration(minutes: 30));
+      
       final reminder = Reminder(
         title: _titleController.text,
         startTime: _startDate,
         endTime: _endDate,
         recurrenceDays: _selectedDays.map((day) => day ? '1' : '0').join(','),
         reminderMinutesBefore: _customMinutes,
+        recurrenceStartDate: _recurrenceStartDate,
+        recurrenceEndDate: _recurrenceEndDate,
       );
 
       await _reminderService.saveReminder(reminder);
@@ -88,31 +96,26 @@ class _AddReminderPageState extends State<AddReminderPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        DateTimeSelector(
-                          startDate: _startDate,
-                          endDate: _endDate,
-                          onStartDateChanged: (date) {
-                            setState(() {
-                              _startDate = date;
-                            });
-                          },
-                          onEndDateChanged: (date) {
-                            setState(() {
-                              _endDate = date;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
                         RepeatSettingBox(
                           selectedDays: _selectedDays,
+                          recurrenceStartDate: _recurrenceStartDate,
+                          recurrenceEndDate: _recurrenceEndDate,
                           onDaysChanged: (days) {
                             setState(() {
                               _selectedDays = days;
+                            });
+                          },
+                          onRecurrenceDaysChanged: (days) {
+                            // recurrenceDays 값 저장 로직 (필요 시)
+                          },
+                          onRecurrenceStartDateChanged: (date) {
+                            setState(() {
+                              _recurrenceStartDate = date;
+                            });
+                          },
+                          onRecurrenceEndDateChanged: (date) {
+                            setState(() {
+                              _recurrenceEndDate = date;
                             });
                           },
                         ),

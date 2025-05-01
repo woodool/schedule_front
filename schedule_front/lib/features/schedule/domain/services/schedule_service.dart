@@ -54,10 +54,19 @@ class ScheduleService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
 
+    // schedule ID 확인
+    if (schedule.scheduleId == null) {
+      throw Exception('일정 ID가 null입니다');
+    }
+
     final idToken = await user.getIdToken(true);
 
+    // ID를 문자열로 안전하게 변환
+    final scheduleIdStr = schedule.scheduleId.toString();
+    print('일정 수정 요청 - ID: $scheduleIdStr');
+
     final response = await http.put(
-      Uri.parse(ApiConfig.scheduleById(schedule.scheduleId.toString())),
+      Uri.parse(ApiConfig.scheduleById(scheduleIdStr)),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $idToken',
@@ -66,9 +75,9 @@ class ScheduleService {
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-    return;
+      return;
     } else {
-    throw Exception('일정 수정 실패: ${response.statusCode} - ${response.body}');
+      throw Exception('일정 수정 실패: ${response.statusCode} - ${response.body}');
     }
   }
 }

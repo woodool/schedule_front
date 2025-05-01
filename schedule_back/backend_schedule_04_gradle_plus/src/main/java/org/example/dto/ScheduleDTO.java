@@ -23,6 +23,9 @@ public class ScheduleDTO {
     private Boolean displayOnCalendar;
     private Integer reminderMinutesBefore;
     private LocalDateTime reminderTime;
+    private LocalDateTime recurrenceStartDate;
+    private LocalDateTime recurrenceEndDate;
+    private String excludedDates;
 
     public static ScheduleDTO fromEntity(org.example.entity.Schedule schedule) {
         return ScheduleDTO.builder()
@@ -37,6 +40,9 @@ public class ScheduleDTO {
                 .displayOnCalendar(schedule.getDisplayOnCalendar())
                 .reminderMinutesBefore(schedule.getReminderMinutesBefore())
                 .reminderTime(schedule.getReminderTime())
+                .recurrenceStartDate(schedule.getRecurrenceStartDate())
+                .recurrenceEndDate(schedule.getRecurrenceEndDate())
+                .excludedDates(schedule.getExcludedDates())
                 .build();
     }
 } 

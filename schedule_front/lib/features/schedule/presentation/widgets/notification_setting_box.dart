@@ -123,18 +123,37 @@ class NotificationSettingBox extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.add_circle_outline,
-                                    size: 24,
-                                    color: Colors.blue,
-                                  ),
+                                  tempType == NotificationType.custom
+                                      ? Icon(
+                                          Icons.radio_button_checked,
+                                          size: 24,
+                                          color: Color(0xFF0062FF),
+                                        )
+                                      : Icon(
+                                          Icons.radio_button_unchecked,
+                                          size: 24,
+                                          color: Colors.grey,
+                                        ),
                                   const SizedBox(width: 12),
-                                  Text(
-                                    '직접 설정',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.blue,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '직접 설정',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Color(0xFF0062FF),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      if (tempType == NotificationType.custom && customMinutes != null)
+                                        Text(
+                                          ' (${_formatCustomTime(customMinutes!)})',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -158,10 +177,28 @@ class NotificationSettingBox extends StatelessWidget {
                     onTypeChanged?.call(tempType);
                     if (tempType == NotificationType.custom) {
                       onCustomMinutesChanged?.call(tempMinutes);
+                    } else {
+                      // 기본 알림 시간 설정
+                      switch (tempType) {
+                        case NotificationType.none:
+                          onCustomMinutesChanged?.call(0);
+                          break;
+                        case NotificationType.tenMinutes:
+                          onCustomMinutesChanged?.call(10);
+                          break;
+                        case NotificationType.oneHour:
+                          onCustomMinutesChanged?.call(60);
+                          break;
+                        case NotificationType.oneDay:
+                          onCustomMinutesChanged?.call(1440);
+                          break;
+                        default:
+                          break;
+                      }
                     }
                     Navigator.of(context).pop();
                   },
-                  child: const Text('확인'),
+                  child: const Text('확인', style: TextStyle(color: Color(0xFF0062FF))),
                 ),
               ],
             );
@@ -194,6 +231,7 @@ class NotificationSettingBox extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Color(0xFF0062FF),
                         ),
                       ),
                     ),
@@ -246,7 +284,7 @@ class NotificationSettingBox extends StatelessWidget {
                                       '분',
                                       style: TextStyle(
                                         fontSize: 20,
-                                        color: isMinutes ? Colors.blue : Colors.black,
+                                        color: isMinutes ? Color(0xFF0062FF) : Colors.black,
                                         fontWeight: isMinutes ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
@@ -256,7 +294,7 @@ class NotificationSettingBox extends StatelessWidget {
                                       '시간',
                                       style: TextStyle(
                                         fontSize: 20,
-                                        color: !isMinutes ? Colors.blue : Colors.black,
+                                        color: !isMinutes ? Color(0xFF0062FF) : Colors.black,
                                         fontWeight: !isMinutes ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
@@ -273,15 +311,17 @@ class NotificationSettingBox extends StatelessWidget {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
                   child: Text('취소'),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
                 ),
                 TextButton(
+                  child: Text('확인', style: TextStyle(color: Color(0xFF0062FF))),
                   onPressed: () {
-                    final minutes = isMinutes ? selectedValue : selectedValue * 60;
-                    Navigator.of(context).pop(minutes);
+                    int finalValue = isMinutes ? selectedValue : selectedValue * 60;
+                    Navigator.pop(context, finalValue);
                   },
-                  child: Text('확인'),
                 ),
               ],
             );
@@ -289,6 +329,15 @@ class NotificationSettingBox extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _formatCustomTime(int minutes) {
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+    if (hours > 0) {
+      return '$hours시간 ${mins > 0 ? '$mins분' : ''} 전';
+    }
+    return '$mins분 전';
   }
 
   Widget _buildUnitButton(

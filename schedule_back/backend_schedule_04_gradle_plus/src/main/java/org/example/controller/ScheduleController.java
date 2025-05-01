@@ -9,7 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/schedules")
@@ -48,6 +50,28 @@ public class ScheduleController {
         try {
             String firebaseUid = authentication.getName();
             scheduleService.deleteSchedule(scheduleId, firebaseUid);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{scheduleId}/exclude-occurrence")
+    public ResponseEntity<?> excludeOccurrence(
+            @PathVariable Long scheduleId,
+            @RequestBody Map<String, String> payload,
+            Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            String excludeDateStr = payload.get("excludeDate");
+            
+            if (excludeDateStr == null) {
+                return ResponseEntity.badRequest().body("excludeDate is required");
+            }
+            
+            LocalDateTime excludeDate = LocalDateTime.parse(excludeDateStr);
+            scheduleService.excludeOccurrence(scheduleId, excludeDate, firebaseUid);
+            
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());

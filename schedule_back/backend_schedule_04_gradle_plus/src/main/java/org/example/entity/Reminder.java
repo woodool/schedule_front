@@ -38,6 +38,15 @@ public class Reminder {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;     // 활성화 여부 (기본 true)
 
+    @Column(name = "recurrence_start_date", nullable = true)
+    private LocalDateTime recurrenceStartDate;
+
+    @Column(name = "recurrence_end_date", nullable = true)
+    private LocalDateTime recurrenceEndDate;
+    
+    @Column(name = "excluded_dates", nullable = true, columnDefinition = "TEXT")
+    private String excludedDates; // 쉼표로 구분된 ISO 날짜 문자열 "2023-10-01,2023-10-08"
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", referencedColumnName = "firebase_uid")
     private User user;

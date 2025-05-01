@@ -53,6 +53,15 @@ public class Schedule {
     @Column(name = "reminder_time", nullable = true)
     private LocalDateTime reminderTime;
 
+    @Column(name = "recurrence_start_date", nullable = true)
+    private LocalDateTime recurrenceStartDate;
+
+    @Column(name = "recurrence_end_date", nullable = true)
+    private LocalDateTime recurrenceEndDate;
+
+    @Column(name = "excluded_dates", nullable = true, columnDefinition = "TEXT")
+    private String excludedDates; // 쉼표로 구분된 ISO 날짜 문자열 "2023-10-01,2023-10-08"
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;

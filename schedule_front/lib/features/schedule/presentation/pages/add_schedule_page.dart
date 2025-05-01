@@ -23,8 +23,10 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now();
+  DateTime _endDate = DateTime.now().add(const Duration(hours: 1));
   List<bool> _selectedDays = [false, false, false, false, false, false, false];
+  DateTime? _recurrenceStartDate;
+  DateTime? _recurrenceEndDate;
   NotificationType _notificationType = NotificationType.none;
   int? _customMinutes;
   String _selectedCategory = '-';
@@ -33,6 +35,15 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   CalendarDisplayType _calendarDisplayType = CalendarDisplayType.show;
   String? _recurrenceDays;
   final ScheduleService _scheduleService = ScheduleService();
+
+  @override
+  void initState() {
+    super.initState();
+    // 현재 시간으로 시작 시간 설정
+    _startDate = DateTime.now();
+    // 마감 시간은 시작 시간 + 1시간으로 설정
+    _endDate = _startDate.add(const Duration(hours: 1));
+  }
 
   @override
   void dispose() {
@@ -60,6 +71,8 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         displayOnCalendar: _calendarDisplayType == CalendarDisplayType.show,
         reminderMinutesBefore: _customMinutes,
         recurrenceDays: _recurrenceDays,
+        recurrenceStartDate: _recurrenceStartDate,
+        recurrenceEndDate: _recurrenceEndDate,
       );
 
       await _scheduleService.createSchedule(schedule);
@@ -123,6 +136,8 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                       children: [
                         RepeatSettingBox(
                           selectedDays: _selectedDays,
+                          recurrenceStartDate: _recurrenceStartDate,
+                          recurrenceEndDate: _recurrenceEndDate,
                           onDaysChanged: (days) {
                             setState(() {
                               _selectedDays = days;
@@ -131,6 +146,16 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
                           onRecurrenceDaysChanged: (days) {
                             setState(() {
                               _recurrenceDays = days;
+                            });
+                          },
+                          onRecurrenceStartDateChanged: (date) {
+                            setState(() {
+                              _recurrenceStartDate = date;
+                            });
+                          },
+                          onRecurrenceEndDateChanged: (date) {
+                            setState(() {
+                              _recurrenceEndDate = date;
                             });
                           },
                         ),

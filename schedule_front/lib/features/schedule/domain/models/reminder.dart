@@ -7,6 +7,9 @@ class Reminder {
   final int? reminderMinutesBefore;
   final bool? isActive;
   final String? date;
+  final DateTime? recurrenceStartDate;
+  final DateTime? recurrenceEndDate;
+  final String? excludedDates;
 
   Reminder({
     this.reminderId,
@@ -17,6 +20,9 @@ class Reminder {
     this.reminderMinutesBefore,
     this.isActive = true,
     this.date,
+    this.recurrenceStartDate,
+    this.recurrenceEndDate,
+    this.excludedDates,
   });
 
   Reminder copyWith({
@@ -28,6 +34,9 @@ class Reminder {
     int? reminderMinutesBefore,
     bool? isActive,
     String? date,
+    DateTime? recurrenceStartDate,
+    DateTime? recurrenceEndDate,
+    String? excludedDates,
   }) {
     return Reminder(
       reminderId: reminderId ?? this.reminderId,
@@ -38,6 +47,9 @@ class Reminder {
       reminderMinutesBefore: reminderMinutesBefore ?? this.reminderMinutesBefore,
       isActive: isActive ?? this.isActive,
       date: date ?? this.date,
+      recurrenceStartDate: recurrenceStartDate ?? this.recurrenceStartDate,
+      recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
+      excludedDates: excludedDates ?? this.excludedDates,
     );
   }
 
@@ -51,6 +63,9 @@ class Reminder {
       'reminderMinutesBefore': reminderMinutesBefore,
       'isActive': isActive,
       'date': date,
+      if (recurrenceStartDate != null) 'recurrenceStartDate': recurrenceStartDate!.toIso8601String(),
+      if (recurrenceEndDate != null) 'recurrenceEndDate': recurrenceEndDate!.toIso8601String(),
+      'excludedDates': excludedDates,
     };
   }
 
@@ -64,6 +79,13 @@ class Reminder {
       reminderMinutesBefore: json['reminderMinutesBefore'] as int?,
       isActive: json['isActive'] as bool?,
       date: json['date'] as String?,
+      recurrenceStartDate: json['recurrenceStartDate'] != null 
+          ? DateTime.parse(json['recurrenceStartDate'] as String) 
+          : null,
+      recurrenceEndDate: json['recurrenceEndDate'] != null 
+          ? DateTime.parse(json['recurrenceEndDate'] as String) 
+          : null,
+      excludedDates: json['excludedDates'] as String?,
     );
   }
 } 

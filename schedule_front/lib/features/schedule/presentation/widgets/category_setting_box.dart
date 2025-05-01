@@ -5,12 +5,14 @@ class CategorySettingBox extends StatelessWidget {
   final String? selectedCategory;
   final ValueChanged<String>? onCategoryChanged;
   final ValueChanged<int?>? onCategoryIdChanged;
+  final int? categoryId;
 
   const CategorySettingBox({
     super.key,
     this.selectedCategory,
     this.onCategoryChanged,
     this.onCategoryIdChanged,
+    this.categoryId,
   });
 
   static const List<String> categories = [
@@ -22,31 +24,46 @@ class CategorySettingBox extends StatelessWidget {
     '-',
   ];
 
+  // 카테고리 이름과 ID 매핑 맵
+  static const Map<String, int> categoryToId = {
+    '업무': 14,
+    '학업': 15,
+    '약속': 16,
+    '운동': 17,
+    '취미': 18,
+    '-': 19,
+  };
+  
+  // ID에서 카테고리 이름으로 변환하는 맵
+  static const Map<int, String> idToCategory = {
+    14: '업무',
+    15: '학업',
+    16: '약속',
+    17: '운동',
+    18: '취미',
+    19: '-',
+  };
+
   int? _getCategoryId(String category) {
-  switch (category) {
-    case '업무':
-      return 14;
-    case '학업':
-      return 15;
-    case '약속':
-      return 16;
-    case '운동':
-      return 17;
-    case '취미':
-      return 18;
-    case '-':
-      return 19;
-    default:
-      return null;
+    return categoryToId[category];
   }
-}
+
+  String _getCategoryNameById(int? id) {
+    return id != null ? (idToCategory[id] ?? '-') : '-';
+  }
 
   String _getCategoryText() {
+    if (categoryId != null) {
+      return _getCategoryNameById(categoryId);
+    }
     return selectedCategory ?? '-';
   }
 
   Future<void> _showCategorySelector(BuildContext context) async {
-    String tempCategory = selectedCategory ?? categories.last;
+    String tempCategory = selectedCategory ?? '-';
+    
+    int initialIndex = categories.indexOf(tempCategory);
+    if (initialIndex < 0) initialIndex = categories.length - 1;
     
     await showDialog(
       context: context,
@@ -85,6 +102,7 @@ class CategorySettingBox extends StatelessWidget {
                       child: Container(
                         padding: EdgeInsets.symmetric(horizontal: 24),
                         child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(initialItem: initialIndex),
                           itemExtent: 44,
                           onSelectedItemChanged: (index) {
                             setState(() {

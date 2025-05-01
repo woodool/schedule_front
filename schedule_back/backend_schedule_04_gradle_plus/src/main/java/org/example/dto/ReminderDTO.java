@@ -21,6 +21,9 @@ public class ReminderDTO {
     private Integer reminderMinutesBefore;
     private LocalDateTime reminderTime;
     private Boolean isActive;
+    private LocalDateTime recurrenceStartDate;
+    private LocalDateTime recurrenceEndDate;
+    private String excludedDates;
 
     public static ReminderDTO fromEntity(Reminder reminder) {
         return ReminderDTO.builder()
@@ -32,6 +35,9 @@ public class ReminderDTO {
                 .reminderMinutesBefore(reminder.getReminderMinutesBefore())
                 .reminderTime(reminder.getReminderTime())
                 .isActive(reminder.getIsActive())
+                .recurrenceStartDate(reminder.getRecurrenceStartDate())
+                .recurrenceEndDate(reminder.getRecurrenceEndDate())
+                .excludedDates(reminder.getExcludedDates())
                 .build();
     }
 }

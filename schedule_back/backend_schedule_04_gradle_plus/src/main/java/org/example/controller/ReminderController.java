@@ -7,7 +7,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reminders")
@@ -42,5 +44,27 @@ public class ReminderController {
     public ResponseEntity<ReminderDTO> updateReminder(@PathVariable Long id, @RequestBody ReminderDTO reminderDTO, Authentication authentication) {
         String firebaseUid = authentication.getName();
         return ResponseEntity.ok(reminderService.updateReminder(id, reminderDTO, firebaseUid));
+    }
+    
+    @PostMapping("/{id}/exclude-occurrence")
+    public ResponseEntity<?> excludeOccurrence(
+            @PathVariable("id") Long reminderId,
+            @RequestBody Map<String, String> payload,
+            Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            String excludeDateStr = payload.get("excludeDate");
+            
+            if (excludeDateStr == null) {
+                return ResponseEntity.badRequest().body("excludeDate is required");
+            }
+            
+            LocalDateTime excludeDate = LocalDateTime.parse(excludeDateStr);
+            reminderService.excludeOccurrence(reminderId, excludeDate, firebaseUid);
+            
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 } 

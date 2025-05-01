@@ -47,8 +47,20 @@ class DateTimeSelector extends StatelessWidget {
 
         if (isStartDate) {
           onStartDateChanged?.call(selectedDateTime);
+          
+          // 시작일이 마감일보다 나중이면 마감일을 자동으로 시작일 + 1시간으로 설정
+          if (selectedDateTime.isAfter(endDate)) {
+            final newEndDate = selectedDateTime.add(const Duration(hours: 1));
+            onEndDateChanged?.call(newEndDate);
+          }
         } else {
-          onEndDateChanged?.call(selectedDateTime);
+          // 선택한 마감일이 시작일보다 이전이면 마감일을 시작일 + 1시간으로 조정
+          if (selectedDateTime.isBefore(startDate)) {
+            final newEndDate = startDate.add(const Duration(hours: 1));
+            onEndDateChanged?.call(newEndDate);
+          } else {
+            onEndDateChanged?.call(selectedDateTime);
+          }
         }
       }
     }
