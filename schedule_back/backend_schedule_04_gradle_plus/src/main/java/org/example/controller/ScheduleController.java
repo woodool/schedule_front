@@ -1,6 +1,7 @@
 package org.example.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.example.dto.PostponeRequestDTO;
 import org.example.dto.ScheduleDTO;
 import org.example.service.ScheduleService;
 import org.springframework.http.ResponseEntity;
@@ -28,10 +29,23 @@ public class ScheduleController {
     }
 
     @PutMapping("/{scheduleId}")
+    public ResponseEntity<ScheduleDTO> postponeScheduleReminder(@PathVariable Long scheduleId, @RequestBody PostponeRequestDTO request, Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        return ResponseEntity.ok(scheduleService.postponeScheduleReminder(scheduleId, firebaseUid, request));
+    }
+
+    @PutMapping("/{scheduleId}")
     public ResponseEntity<ScheduleDTO> updateSchedule(@PathVariable Long scheduleId,
                                                        @RequestBody ScheduleDTO scheduleDTO,
                                                        Authentication authentication) {
         String firebaseUid = authentication.getName();
         return ResponseEntity.ok(scheduleService.updateSchedule(scheduleId, scheduleDTO, firebaseUid));
+    }
+
+    @DeleteMapping("/{scheduleId}")
+    public ResponseEntity<Void> deleteSchedule(@PathVariable Long scheduleId, Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        scheduleService.deleteSchedule(scheduleId, firebaseUid);
+        return ResponseEntity.ok().build();
     }
 }

@@ -1,7 +1,9 @@
 package org.example.service;
 
 import lombok.RequiredArgsConstructor;
+import org.example.dto.PostponeRequestDTO;
 import org.example.dto.ScheduleDTO;
+import org.example.entity.Reminder;
 import org.example.entity.Schedule;
 import org.example.entity.User;
 import org.example.repository.ScheduleRepository;
@@ -90,5 +92,49 @@ public class ScheduleService {
         schedule.setReminderTime(reminderTime);
 
         return ScheduleDTO.fromEntity(schedule);
+    }
+
+    @Transactional
+    public ScheduleDTO postponeScheduleReminder(Long scheduleId, String firebaseUid , PostponeRequestDTO request) {
+        User user = userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new RuntimeException("일정을 찾을 수 없습니다."));
+
+        switch (request.getMode()) {
+            case "1일후":
+                schedule.setReminderTime(schedule.getReminderTime().plusDays(1));
+                break;
+            case "7일후":
+                schedule.setReminderTime(schedule.getReminderTime().plusDays(7));
+                break;
+            case "직접설정":
+                if (request.getCustomReminderTime() != null) {
+                    schedule.setReminderTime(request.getCustomReminderTime());
+                } else {
+                    throw new RuntimeException("customReminderTime이 필요합니다.");
+                }
+                break;
+            default:
+                throw new RuntimeException("잘못된 미루기 모드입니다.");
+        }
+        scheduleRepository.save(schedule);
+        return ScheduleDTO.fromEntity(schedule);
+    }
+
+    @Transactional
+    public void deleteSchedule(Long scheduleId, String firebaseUid) {
+        User user = userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new RuntimeException("일정을 찾을 수 없습니다."));
+
+        if (!schedule.getUser().equals(user)) {
+            throw new RuntimeException("권한이 없습니다.");
+        }
+
+        scheduleRepository.delete(schedule);
     }
 }
