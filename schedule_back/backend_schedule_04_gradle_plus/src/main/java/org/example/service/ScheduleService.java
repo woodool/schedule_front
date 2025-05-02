@@ -201,4 +201,22 @@ public class ScheduleService {
         
         scheduleRepository.save(schedule);
     }
+    
+    /**
+     * 일정 검색 기능
+     * 사용자의 일정 중에서 제목 또는 설명에 검색어가 포함된 일정을 검색합니다.
+     * 
+     * @param query 검색할 텍스트
+     * @param firebaseUid 사용자 ID
+     * @return 검색된 일정 목록
+     */
+    @Transactional(readOnly = true)
+    public List<ScheduleDTO> searchSchedules(String query, String firebaseUid) {
+        User user = userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+        
+        return scheduleRepository.searchSchedules(user, query).stream()
+                .map(ScheduleDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
 }

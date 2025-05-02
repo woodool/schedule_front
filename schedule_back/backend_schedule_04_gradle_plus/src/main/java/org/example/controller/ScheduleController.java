@@ -77,4 +77,22 @@ public class ScheduleController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    /**
+     * 일정 검색 API
+     * 
+     * @param query 검색할 텍스트
+     * @param authentication 인증 정보
+     * @return 검색된 일정 목록
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<ScheduleDTO>> searchSchedules(@RequestParam String query, Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            List<ScheduleDTO> searchResults = scheduleService.searchSchedules(query, firebaseUid);
+            return ResponseEntity.ok(searchResults);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
 }
