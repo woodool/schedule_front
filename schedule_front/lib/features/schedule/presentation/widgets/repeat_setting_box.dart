@@ -310,6 +310,10 @@ class RepeatSettingBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 반복 설정 텍스트 미리 계산
+    final repeatText = _getSelectedDaysText();
+    final bool hasRepeatDays = selectedDays.contains(true);
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -337,12 +341,14 @@ class RepeatSettingBox extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                _getSelectedDaysText(),
+                repeatText,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black,
+                  color: hasRepeatDays ? Colors.black : Colors.grey,
                 ),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),

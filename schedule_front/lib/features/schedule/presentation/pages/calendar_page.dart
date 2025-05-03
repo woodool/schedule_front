@@ -6,6 +6,7 @@ import 'package:schedule/features/schedule/domain/models/priority.dart';
 import 'package:schedule/features/schedule/domain/models/schedule.dart';
 import 'package:schedule/features/schedule/domain/services/schedule_service.dart';
 import 'package:schedule/features/schedule/presentation/pages/schedule_search_page.dart';
+import 'package:schedule/features/schedule/presentation/widgets/recurrence_delete_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -34,57 +35,195 @@ class _CalendarPageState extends State<CalendarPage> {
     super.initState();
     _focusedDay = DateTime.now();
     _selectedDay = DateTime.now();
-    _calendarFormat = CalendarFormat.month;
-    _loadSchedules();
+    _calendarFormat = CalendarFormat.week;
+    // 초기 로드
+    _loadSchedules(forceRefresh: true);
   }
 
   @override
   void didUpdateWidget(CalendarPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 화면이 다시 표시될 때마다 일정 새로고침
-    _loadSchedules();
+    _loadSchedules(forceRefresh: true);
   }
 
-  Future<void> _loadSchedules() async {
+  // 강제로 일정 다시 로드
+  void refreshSchedules() {
+    print('캘린더 일정 강제 새로고침 요청');
+    // 모든 이벤트 데이터를 초기화하고 새로 불러옴
+    setState(() {
+      _events.clear();
+    });
+    _loadSchedules(forceRefresh: true);
+  }
+
+  Future<void> _loadSchedules({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
+    
     try {
-      // 서비스를 통해 일정 데이터 로드
+      print('일정 불러오기 시작 (강제 새로고침: $forceRefresh)');
+      // 캐시 무시하고 서버에서 새로운 데이터 받기
       final schedules = await _scheduleService.getSchedules();
+      print('서버에서 받은 일정 수: ${schedules.length}개');
       
-      // 날짜별로 일정 정리
-      final events = <DateTime, List<Schedule>>{};
+      // 반복 일정 디버깅을 위한 로그 추가
+      for (var schedule in schedules) {
+        if (schedule.recurrenceDays != null && 
+            schedule.recurrenceDays!.isNotEmpty && 
+            schedule.recurrenceDays != "0,0,0,0,0,0,0") {
+          print('일정 로드: ID=${schedule.scheduleId}, 제목=\"${schedule.title}\", ' +
+                '반복=${schedule.recurrenceDays}, ' +
+                '시작=${schedule.recurrenceStartDate}, ' +
+                '종료=${schedule.recurrenceEndDate}');
+        }
+      }
       
-      for (final schedule in schedules) {
-        // displayOnCalendar 속성에 관계없이 모든 일정을 _events에 저장
-        // 다일 일정 처리 - 시작일부터 종료일까지 모든 날짜에 일정 표시
-        final startDay = DateTime(
-          schedule.startTime.year,
-          schedule.startTime.month,
-          schedule.startTime.day,
-        );
-        
-        final endDay = DateTime(
-          schedule.endTime.year,
-          schedule.endTime.month,
-          schedule.endTime.day,
-        );
-        
-        // 시작일부터 종료일까지 순회
-        for (DateTime day = startDay; 
-            !day.isAfter(endDay); 
-            day = day.add(const Duration(days: 1))) {
-              
-          final normalizedDay = DateTime(day.year, day.month, day.day);
+      // 기존 이벤트 데이터를 완전히 비우고 새로 로드
+      final Map<DateTime, List<Schedule>> events = {};
+      
+      // 현재 기준 이전 1년과 이후 1년 범위 설정
+      final now = DateTime.now();
+      final startRange = DateTime(now.year - 1, now.month, now.day);
+      final endRange = DateTime(now.year + 1, now.month, now.day);
+      
+      for (var schedule in schedules) {
+        // 반복이 아닌 일반 일정 처리
+        if (schedule.recurrenceDays == null || schedule.recurrenceDays!.isEmpty || schedule.recurrenceDays == "0,0,0,0,0,0,0") {
+          final date = DateTime(
+            schedule.startTime.year,
+            schedule.startTime.month,
+            schedule.startTime.day,
+          );
           
-          if (events[normalizedDay] == null) {
-            events[normalizedDay] = [];
+          if (!events.containsKey(date)) {
+            events[date] = [];
+          }
+          events[date]!.add(schedule);
+        } 
+        // 반복 일정 처리
+        else {
+          // 반복 일정의 시작일과 종료일 설정
+          DateTime recurrenceStart = schedule.recurrenceStartDate ?? schedule.startTime;
+          
+          // 종료일이 없으면 기본값 사용, 있으면 정확히 해당 종료일까지만 표시
+          DateTime recurrenceEnd;
+          if (schedule.recurrenceEndDate != null) {
+            // 종료일이 설정된 경우 해당 종료일을 그대로 사용 (시간 정보는 제외)
+            recurrenceEnd = DateTime(
+              schedule.recurrenceEndDate!.year,
+              schedule.recurrenceEndDate!.month,
+              schedule.recurrenceEndDate!.day,
+              23, 59, 59  // 해당 일의 마지막 시간까지 포함
+            );
+            
+            print('반복 일정 ${schedule.title}(ID: ${schedule.scheduleId}) - 종료일: ${recurrenceEnd.year}-${recurrenceEnd.month}-${recurrenceEnd.day}');
+          } else {
+            // 종료일이 없는 경우 기본 범위 사용
+            recurrenceEnd = endRange;
           }
           
-          events[normalizedDay]!.add(schedule);
+          // 캘린더 표시 범위 내로 제한
+          if (recurrenceStart.isBefore(startRange)) {
+            recurrenceStart = startRange;
+          }
+          if (recurrenceEnd.isAfter(endRange)) {
+            recurrenceEnd = endRange;
+          }
+          
+          // 반복 요일 패턴 분석
+          List<int> repeatDays = [];
+          if (schedule.recurrenceDays!.split(',').length == 7) {
+            // "1,0,1,0,1,0,0" 형식
+            List<String> days = schedule.recurrenceDays!.split(',');
+            for (int i = 0; i < 7; i++) {
+              if (days[i] == '1') {
+                repeatDays.add(i + 1); // 1(월요일)부터 7(일요일)
+              }
+            }
+          } else {
+            // "1,3,5" 형식
+            repeatDays = schedule.recurrenceDays!.split(',')
+                .map((day) => int.tryParse(day))
+                .whereType<int>()
+                .toList();
+          }
+          
+          // 제외된 날짜 목록
+          Set<String> excludedDatesSet = {};
+          if (schedule.excludedDates != null && schedule.excludedDates!.isNotEmpty) {
+            print('일정 ID ${schedule.scheduleId} - 제외 날짜 목록: ${schedule.excludedDates}');
+            excludedDatesSet = schedule.excludedDates!.split(',').toSet();
+            
+            // 특정 일정의 제외 날짜 로그 상세 출력
+            if (schedule.title.contains("testtest")) {
+              print('일정 \"${schedule.title}\" (ID: ${schedule.scheduleId})의 제외 날짜 수: ${excludedDatesSet.length}개');
+              // 너무 많으면 첫 5개만 출력
+              final previewList = excludedDatesSet.take(5).toList();
+              print('제외 날짜 샘플: ${previewList.join(", ")}');
+              
+              // 특정 날짜의 제외 여부 확인
+              final testDate = "2025-05-19";
+              print('2025-05-19 제외 여부: ${excludedDatesSet.contains(testDate)}');
+            }
+          }
+          
+          // 반복 일정을 각 해당 요일에 추가
+          DateTime current = recurrenceStart;
+          while (!current.isAfter(recurrenceEnd)) {
+            // 현재 날짜의 요일 (1: 월요일, 7: 일요일)
+            int weekday = current.weekday;
+            
+            // 날짜 형식 통일 (yyyy-MM-dd)
+            final dateStr = "${current.year}-${current.month.toString().padLeft(2, '0')}-${current.day.toString().padLeft(2, '0')}";
+            
+            // 특정 반복 일정과 특정 날짜에 대한 상세 로그 추가
+            if (schedule.title.contains("testtest") && 
+                current.year == 2025 && current.month == 5 && current.day == 19) {
+              print('일정 확인: ${schedule.title} (ID: ${schedule.scheduleId})');
+              print('날짜: $dateStr, 반복 종료일: ${recurrenceEnd.year}-${recurrenceEnd.month}-${recurrenceEnd.day}');
+              print('포함 여부: ${!current.isAfter(recurrenceEnd)}');
+              print('요일 포함: ${repeatDays.contains(weekday)}, 제외 여부: ${excludedDatesSet.contains(dateStr)}');
+            }
+            
+            // 이 요일이 반복 대상이고, 제외된 날짜가 아니면 일정 추가
+            if (repeatDays.contains(weekday) && !excludedDatesSet.contains(dateStr)) {
+              final eventDate = DateTime(current.year, current.month, current.day);
+              if (!events.containsKey(eventDate)) {
+                events[eventDate] = [];
+              }
+              
+              // 반복 일정의 시간 정보를 현재 날짜에 맞게 조정
+              final adjustedStartTime = DateTime(
+                current.year,
+                current.month,
+                current.day,
+                schedule.startTime.hour,
+                schedule.startTime.minute,
+              );
+              
+              final adjustedEndTime = DateTime(
+                current.year,
+                current.month,
+                current.day,
+                schedule.endTime.hour,
+                schedule.endTime.minute,
+              );
+              
+              // 원본 일정 복사하면서 날짜만 조정
+              final eventSchedule = schedule.copyWith(
+                startTime: adjustedStartTime,
+                endTime: adjustedEndTime,
+              );
+              
+              events[eventDate]!.add(eventSchedule);
+            }
+            
+            // 다음 날짜로 이동
+            current = current.add(const Duration(days: 1));
+          }
         }
       }
       
@@ -118,7 +257,12 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Schedule> _getAllEventsForDay(DateTime day) {
     final normalizedDate = DateTime(day.year, day.month, day.day);
     // displayOnCalendar 속성과 관계없이 모든 일정을 반환
-    return _events[normalizedDate] ?? [];
+    final events = _events[normalizedDate] ?? [];
+    
+    // 시작 시간 순으로 정렬
+    events.sort((a, b) => a.startTime.compareTo(b.startTime));
+    
+    return events;
   }
 
   // 마커 표시를 위한 일정 필터링 (displayOnCalendar가 true인 일정만 표시)
@@ -143,7 +287,14 @@ class _CalendarPageState extends State<CalendarPage> {
             child: IconButton(
               icon: Image.asset('assets/images/calendarchange.png', width: 24, height: 24),
               onPressed: () {
-                // 메뉴 기능
+                // 캘린더 형식 변경
+                setState(() {
+                  if (_calendarFormat == CalendarFormat.week) {
+                    _calendarFormat = CalendarFormat.month;
+                  } else {
+                    _calendarFormat = CalendarFormat.week;
+                  }
+                });
               },
             ),
           ),
@@ -211,6 +362,16 @@ class _CalendarPageState extends State<CalendarPage> {
                 headerPadding: const EdgeInsets.symmetric(vertical: 16),
                 headerMargin: const EdgeInsets.only(bottom: 8),
                 titleTextFormatter: (date, locale) {
+                  // 주간 뷰일 때는 연도, 월, 주차 표시
+                  if (_calendarFormat == CalendarFormat.week) {
+                    // 해당 월의 첫 번째 날짜 찾기
+                    final firstDayOfMonth = DateTime(date.year, date.month, 1);
+                    
+                    // 현재 날짜가 몇 번째 주인지 계산
+                    final int weekNumber = ((date.day + firstDayOfMonth.weekday - 1) / 7).ceil();
+                    
+                    return '${date.year}년 ${date.month}월 ${weekNumber}주차';
+                  }
                   return '${date.year}년 ${date.month}월';
                 },
               ),
@@ -270,6 +431,7 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
               availableCalendarFormats: const {
                 CalendarFormat.month: '월',
+                CalendarFormat.week: '주',
               },
               eventLoader: _getEventsForCalendarMarker,
               selectedDayPredicate: (day) {
@@ -301,7 +463,12 @@ class _CalendarPageState extends State<CalendarPage> {
                   return Center(
                     child: Text(
                       weekdays[index],
-                      style: TextStyle(color: color),
+                      style: TextStyle(
+                        color: color,
+                        fontFamily: 'Pretendard',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   );
                 },
@@ -475,6 +642,9 @@ class _CalendarPageState extends State<CalendarPage> {
     // 하단 일정바에는 모든 일정을 표시 (displayOnCalendar=false 포함)
     final events = _getAllEventsForDay(_selectedDay);
     
+    // 시작 시간 순으로 정렬
+    events.sort((a, b) => a.startTime.compareTo(b.startTime));
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -525,7 +695,7 @@ class _CalendarPageState extends State<CalendarPage> {
               : ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                   itemCount: events.length + 1, // 추가 여백을 위해 +1
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 0), // 상단 여백 제거
                   itemBuilder: (context, index) {
                     if (index == events.length) {
                       // 마지막 아이템은 추가 여백
@@ -541,106 +711,243 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildScheduleItem(Schedule schedule) {
     final priority = Priority.fromValue(schedule.priority);
+    // 24시간 형식으로 시간 표시 (HH는 대문자로 24시간 형식, hh는 소문자로 12시간 형식)
     final startTime = DateFormat('HH:mm').format(schedule.startTime);
     final endTime = DateFormat('HH:mm').format(schedule.endTime);
     
-    return GestureDetector(
-      onTap: () async {
-        // 일정 수정 페이지로 이동
-        final result = await Navigator.pushNamed(
-          context, 
-          '/edit_schedule',
-          arguments: schedule,
-        );
-        
-        if (result == true) {
+    // 캘린더 형식에 따라 다른 디자인 적용
+    if (_calendarFormat == CalendarFormat.week) {
+      // 주차별 캘린더 화면 (주간 뷰)에서 사용할 디자인
+      // 우선순위에 따라 다른 색상 적용
+      Color boxColor;
+      switch (priority) {
+        case Priority.high:
+          boxColor = const Color(0xFFFF9E99); // 빨강색
+          break;
+        case Priority.medium:
+          boxColor = const Color(0xFFFFEE8C); // 노랑색
+          break;
+        case Priority.low:
+          boxColor = const Color(0xFFADEBB3); // 초록색
+          break;
+        default:
+          boxColor = const Color(0xFFB8B4A3); // 기본 베이지색
+      }
+      
+      return GestureDetector(
+        onTap: () async {
+          // 일정 수정 페이지로 이동
+          final result = await Navigator.pushNamed(
+            context, 
+            '/edit_schedule',
+            arguments: schedule,
+          );
+          
           // 일정 수정 후 새로고침
-          _loadSchedules();
-        }
-      },
-      onLongPress: () {
-        // 길게 누르면 삭제/미루기 옵션 표시
-        _showScheduleOptions(schedule);
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          if (result == true) {
+            refreshSchedules();
+          }
+        },
+        onLongPress: () {
+          // 길게 누르면 삭제/미루기 옵션 표시
+          _showScheduleOptions(schedule);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2), // 상단 여백 추가 줄임
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end, // 오른쪽 정렬로 변경
+            children: [
+              // 시간과 실선을 Row로 배치하여 사진처럼 표시
+              Row(
                 children: [
-                  Container(
-                    width: 3,
-                    height: 16,
-                    margin: const EdgeInsets.only(top: 2, right: 8),
-                    decoration: BoxDecoration(
-                      color: priority.color,
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          schedule.title,
-                          style: const TextStyle(
-                            fontFamily: 'Pretendard',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (schedule.description != null && schedule.description!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              schedule.description!,
-                              style: const TextStyle(
-                                fontFamily: 'Pretendard',
-                                fontSize: 14,
-                                color: Color(0xFF767676),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: Colors.grey.withOpacity(0.05),
-              child: Row(
-                children: [
+                  // 시간 표시 - 24시간 형식 (13:00, 23:55 등)
                   Text(
-                    '$startTime ~ $endTime',
+                    startTime,
                     style: const TextStyle(
                       fontFamily: 'Pretendard',
-                      fontSize: 12,
-                      color: Color(0xFF767676),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 실선
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: Colors.grey.withOpacity(0.3),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 2), // 간격 줄임
+              // 일정 내용
+              Container(
+                width: 224, // 요청한 박스 너비
+                height: 126, // 요청한 박스 높이
+                margin: const EdgeInsets.only(top: 0), // 상단 여백 제거
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: boxColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 제목
+                    Text(
+                      schedule.title,
+                      style: const TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4), // 간격 4로 변경
+                    // 종료 시간 - 24시간 형식 (13:00, 23:55 등)
+                    Row(
+                      children: [
+                        Text(
+                          "⏱️",
+                          style: const TextStyle(
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '~ $endTime',
+                          style: const TextStyle(
+                            fontFamily: 'Pretendard',
+                            fontSize: 12,
+                            color: Color(0xFF767676),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15), // 간격 15로 변경
+                    // 메모 내용
+                    if (schedule.description != null && schedule.description!.isNotEmpty)
+                      Text(
+                        schedule.description!,
+                        style: const TextStyle(
+                          fontFamily: 'Pretendard',
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      // 기본 캘린더 화면 (월간 뷰)에서 사용할 디자인
+      return GestureDetector(
+        onTap: () async {
+          // 일정 수정 페이지로 이동
+          final result = await Navigator.pushNamed(
+            context, 
+            '/edit_schedule',
+            arguments: schedule,
+          );
+          
+          // 일정 수정 후 새로고침
+          if (result == true) {
+            refreshSchedules();
+          }
+        },
+        onLongPress: () {
+          // 길게 누르면 삭제/미루기 옵션 표시
+          _showScheduleOptions(schedule);
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), // 간격 추가
+          padding: EdgeInsets.zero, // 내부 여백 제거
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 3,
+                      height: 16,
+                      margin: const EdgeInsets.only(top: 2, right: 8),
+                      decoration: BoxDecoration(
+                        color: priority.color,
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            schedule.title,
+                            style: const TextStyle(
+                              fontFamily: 'Pretendard',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (schedule.description != null && schedule.description!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                schedule.description!,
+                                style: const TextStyle(
+                                  fontFamily: 'Pretendard',
+                                  fontSize: 14,
+                                  color: Color(0xFF767676),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                color: Colors.grey.withOpacity(0.05),
+                child: Row(
+                  children: [
+                    Text(
+                      '$startTime ~ $endTime', // 24시간 형식 (13:00, 23:55 등)
+                      style: const TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontSize: 12,
+                        color: Color(0xFF767676),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   String _getDayOfWeek(int weekday) {
@@ -836,53 +1143,9 @@ class _CalendarPageState extends State<CalendarPage> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                onTap: () async {
+                onTap: () {
                   Navigator.pop(context);
-                  
-                  // 삭제 확인 대화상자
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('일정 삭제'),
-                      content: const Text('이 일정을 삭제하시겠습니까?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('취소'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('삭제', style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
-                    ),
-                  );
-                  
-                  if (confirmed == true) {
-                    try {
-                      await _scheduleService.deleteSchedule(schedule.scheduleId!);
-                      
-                      setState(() {
-                        // 현재 선택된 날짜의 이벤트에서 해당 일정 제거
-                        final normalizedDate = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
-                        if (_events[normalizedDate] != null) {
-                          _events[normalizedDate]!.removeWhere((s) => s.scheduleId == schedule.scheduleId);
-                        }
-                      });
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('일정이 삭제되었습니다')),
-                      );
-                      
-                      // 전체 일정을 백그라운드에서 다시 로드
-                      _loadSchedules();
-                      
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('일정 삭제 중 오류가 발생했습니다: $e')),
-                      );
-                    }
-                  }
+                  _deleteSchedule(schedule);
                 },
               ),
               ListTile(
@@ -1111,5 +1374,182 @@ class _CalendarPageState extends State<CalendarPage> {
         );
       }
     }
+  }
+
+  // 일정 삭제 메서드
+  Future<void> _deleteSchedule(Schedule schedule) async {
+    final bool isRecurring = schedule.recurrenceDays != null && 
+                            schedule.recurrenceDays!.isNotEmpty &&
+                            schedule.recurrenceDays != "0,0,0,0,0,0,0";
+    
+    // 삭제 다이얼로그 표시
+    final result = await showDialog(
+      context: context,
+      builder: (context) => RecurrenceDeleteDialog(isRecurring: isRecurring),
+    );
+    
+    if (result == null) {
+      // 취소됨
+      return;
+    }
+    
+    try {
+      final scheduleId = schedule.scheduleId;
+      if (scheduleId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정 ID가 없습니다')),
+        );
+        return;
+      }
+
+      if (!isRecurring || result == true) {
+        // 일회성 일정이거나 단순 확인에서 '삭제' 선택한 경우
+        await _deleteEntireSchedule(scheduleId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정이 삭제되었습니다')),
+        );
+      } else {
+        // 반복 일정의 경우 선택한 모드에 따라 처리
+        switch (result) {
+          case RecurrenceDeleteMode.single:
+            await _deleteSingleOccurrence(schedule);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('해당 일정만 삭제되었습니다')),
+            );
+            break;
+          case RecurrenceDeleteMode.thisAndFuture:
+            await _deleteThisAndFutureOccurrences(schedule);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('이 일정 및 향후 일정이 삭제되었습니다')),
+            );
+            break;
+          case RecurrenceDeleteMode.allSeries:
+            await _deleteEntireSchedule(scheduleId);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('전체 반복 일정이 삭제되었습니다')),
+            );
+            break;
+        }
+      }
+      
+      // 현재 선택된 날짜의 이벤트에서 해당 일정 제거
+      setState(() {
+        final normalizedDate = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
+        if (_events[normalizedDate] != null) {
+          _events[normalizedDate]!.removeWhere((s) => s.scheduleId == schedule.scheduleId);
+        }
+      });
+      
+      // 일정 새로고침
+      _loadSchedules();
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('일정 삭제 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
+  }
+  
+  // 일정 전체 삭제 메서드
+  Future<void> _deleteEntireSchedule(int scheduleId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    
+    final idToken = await user.getIdToken(true);
+    
+    final response = await http.delete(
+      Uri.parse('${ApiConfig.schedulesEndpoint}/$scheduleId'),
+      headers: {
+        'Authorization': 'Bearer $idToken',
+      },
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('일정 삭제 실패: ${response.statusCode}');
+    }
+  }
+  
+  // 단일 반복 일정 삭제 메서드 (해당 날짜만 제외)
+  Future<void> _deleteSingleOccurrence(Schedule schedule) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    
+    final idToken = await user.getIdToken(true);
+    final scheduleId = schedule.scheduleId!;
+    
+    // 현재 날짜
+    final currentDate = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    );
+    
+    // 반복 일정에서 현재 날짜 제외
+    final excludeDate = currentDate.toIso8601String();
+    
+    // API 호출: 반복 일정에서 특정 날짜 제외
+    final excludeResponse = await http.post(
+      Uri.parse('${ApiConfig.schedulesEndpoint}/$scheduleId/exclude-occurrence'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $idToken',
+      },
+      body: json.encode({
+        'excludeDate': excludeDate,
+      }),
+    );
+    
+    if (excludeResponse.statusCode != 200) {
+      throw Exception('반복 일정에서 날짜 제외 실패: ${excludeResponse.statusCode}');
+    }
+  }
+  
+  // 이 일정 및 향후 일정 삭제 메서드 (종료일 변경)
+  Future<void> _deleteThisAndFutureOccurrences(Schedule schedule) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    
+    final idToken = await user.getIdToken(true);
+    final scheduleId = schedule.scheduleId!;
+    
+    // 현재 날짜
+    final currentDate = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    );
+    
+    // 원본 일정의 시작일을 가져옴
+    final originalStartDate = schedule.recurrenceStartDate;
+    
+    // 원본 일정을 삭제하기 전에 이전 일정만 따로 저장하는 일정을 만들기
+    if (originalStartDate != null && originalStartDate.isBefore(currentDate)) {
+      // 복사본 생성 - 종료일을 현재 날짜 전날로 변경 (이전 일정만 유지)
+      final previousDay = currentDate.subtract(const Duration(days: 1));
+      
+      // 원본 일정의 복사본 생성 - 이전 일정만 유지하기 위한 목적
+      final previousSchedule = Schedule(
+        title: schedule.title,
+        description: schedule.description,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        categoryId: schedule.categoryId,
+        priority: schedule.priority,
+        displayOnCalendar: schedule.displayOnCalendar,
+        reminderMinutesBefore: schedule.reminderMinutesBefore,
+        recurrenceDays: schedule.recurrenceDays,
+        recurrenceStartDate: originalStartDate,
+        recurrenceEndDate: previousDay, // 종료일을 현재 날짜 전날로 변경
+        excludedDates: schedule.excludedDates,
+      );
+      
+      // 이전 일정 생성 API 호출
+      await _scheduleService.createSchedule(previousSchedule);
+    }
+    
+    // 원본 일정 삭제
+    await _deleteEntireSchedule(scheduleId);
   }
 } 

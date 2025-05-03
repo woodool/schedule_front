@@ -38,18 +38,17 @@ public class ReminderService {
         // 기본값 처리
         String recurrenceDays = reminderDTO.getRecurrenceDays() != null ? reminderDTO.getRecurrenceDays() : "0,0,0,0,0,0,0";
         Integer reminderMinutesBefore = reminderDTO.getReminderMinutesBefore() != null ? reminderDTO.getReminderMinutesBefore() : 0;
-        LocalDateTime calculatedReminderTime = reminderDTO.getStartTime() != null ?
-                reminderDTO.getStartTime().minusMinutes(reminderMinutesBefore) :
-                LocalDateTime.now();
+        
+        // reminderTime은 현재시간 사용
+        LocalDateTime calculatedReminderTime = LocalDateTime.now();
 
         Reminder reminder = Reminder.builder()
-                .title(reminderDTO.getTitle())
-                .startTime(reminderDTO.getStartTime())
-                .endTime(reminderDTO.getEndTime())
+                .reminderTitle(reminderDTO.getReminderTitle())
                 .recurrenceDays(recurrenceDays)
                 .reminderMinutesBefore(reminderMinutesBefore)
                 .reminderTime(calculatedReminderTime)
                 .isActive(true)
+                .checkedDate(null) // 초기에는 체크되지 않음
                 .recurrenceStartDate(reminderDTO.getRecurrenceStartDate())
                 .recurrenceEndDate(reminderDTO.getRecurrenceEndDate())
                 .user(user)
@@ -57,6 +56,7 @@ public class ReminderService {
 
         return ReminderDTO.fromEntity(reminderRepository.save(reminder));
     }
+    
     @Transactional
     public ReminderDTO updateReminder(Long reminderId, ReminderDTO reminderDTO, String firebaseUid) {
         User user = userRepository.findByFirebaseUid(firebaseUid)
@@ -71,26 +71,52 @@ public class ReminderService {
         }
 
         // 수정 내용 적용
-        reminder.setTitle(reminderDTO.getTitle());
-        reminder.setStartTime(reminderDTO.getStartTime());
-        reminder.setEndTime(reminderDTO.getEndTime());
+        reminder.setReminderTitle(reminderDTO.getReminderTitle());
         reminder.setRecurrenceDays(reminderDTO.getRecurrenceDays());
         reminder.setReminderMinutesBefore(reminderDTO.getReminderMinutesBefore());
         reminder.setRecurrenceStartDate(reminderDTO.getRecurrenceStartDate());
         reminder.setRecurrenceEndDate(reminderDTO.getRecurrenceEndDate());
         
-        // isActive 필드 업데이트 코드 추가
+        // isActive 및 checkedDate 필드 업데이트
         if (reminderDTO.getIsActive() != null) {
             reminder.setIsActive(reminderDTO.getIsActive());
         }
+        
+        // checkedDate 필드 업데이트
+        reminder.setCheckedDate(reminderDTO.getCheckedDate());
 
-        Integer reminderMinutesBefore = reminderDTO.getReminderMinutesBefore() != null ? reminderDTO.getReminderMinutesBefore() : 0;
-        LocalDateTime reminderTime = reminderDTO.getStartTime() != null
-            ? reminderDTO.getStartTime().minusMinutes(reminderMinutesBefore)
-            : LocalDateTime.now();
-        reminder.setReminderTime(reminderTime);
+        // reminderTime 업데이트 (현재 시간 사용)
+        reminder.setReminderTime(LocalDateTime.now());
 
         return ReminderDTO.fromEntity(reminder);
+    }
+
+    /**
+     * 리마인더 체크박스 토글 메서드
+     * 체크해도 isActive를 유지하고 checkedDate만 업데이트
+     */
+    @Transactional
+    public ReminderDTO toggleReminderCheck(Long reminderId, Boolean isChecked, String firebaseUid) {
+        User user = userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        Reminder reminder = reminderRepository.findById(reminderId)
+                .orElseThrow(() -> new RuntimeException("리마인더를 찾을 수 없습니다."));
+
+        // 권한 검증
+        if (!reminder.getUser().getFirebaseUid().equals(firebaseUid)) {
+            throw new RuntimeException("권한이 없습니다.");
+        }
+
+        if (isChecked) {
+            // 체크됨: checkedDate만 기록하고 isActive는 유지
+            reminder.setCheckedDate(LocalDateTime.now());
+        } else {
+            // 체크 해제: checkedDate만 제거하고 isActive는 유지
+            reminder.setCheckedDate(null);
+        }
+
+        return ReminderDTO.fromEntity(reminderRepository.save(reminder));
     }
 
     @Transactional
@@ -132,7 +158,29 @@ public class ReminderService {
         
         // 제외할 날짜의 요일이 반복 요일에 포함되는지 확인
         int dayOfWeek = excludeDateOnly.getDayOfWeek().getValue(); // 1(월) ~ 7(일)
-        if (!reminder.getRecurrenceDays().contains(String.valueOf(dayOfWeek))) {
+        
+        boolean isValidDay = false;
+        String recurrenceDays = reminder.getRecurrenceDays();
+        
+        // "1,0,1,0,1,0,0" 형식
+        if (recurrenceDays.split(",").length == 7) {
+            String[] days = recurrenceDays.split(",");
+            if (days[dayOfWeek - 1].equals("1")) {
+                isValidDay = true;
+            }
+        } 
+        // "1,3,5" 형식
+        else if (recurrenceDays.contains(",")) {
+            String[] dayNumbers = recurrenceDays.split(",");
+            for (String day : dayNumbers) {
+                if (day.equals(String.valueOf(dayOfWeek))) {
+                    isValidDay = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!isValidDay) {
             throw new RuntimeException("제외할 날짜가 반복 요일에 포함되지 않습니다.");
         }
         

@@ -46,6 +46,29 @@ public class ReminderController {
         return ResponseEntity.ok(reminderService.updateReminder(id, reminderDTO, firebaseUid));
     }
     
+    /**
+     * 리마인더 체크박스 토글 엔드포인트
+     */
+    @PutMapping("/{id}/toggle-check")
+    public ResponseEntity<ReminderDTO> toggleCheck(
+            @PathVariable("id") Long reminderId,
+            @RequestBody Map<String, Boolean> payload,
+            Authentication authentication) {
+        try {
+            String firebaseUid = authentication.getName();
+            Boolean isChecked = payload.get("isChecked");
+            
+            if (isChecked == null) {
+                return ResponseEntity.badRequest().body(null);
+            }
+            
+            ReminderDTO updatedReminder = reminderService.toggleReminderCheck(reminderId, isChecked, firebaseUid);
+            return ResponseEntity.ok(updatedReminder);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+    
     @PostMapping("/{id}/exclude-occurrence")
     public ResponseEntity<?> excludeOccurrence(
             @PathVariable("id") Long reminderId,

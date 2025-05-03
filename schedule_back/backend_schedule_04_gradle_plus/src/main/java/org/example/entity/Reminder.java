@@ -17,14 +17,8 @@ public class Reminder {
     @Column(name = "reminder_id")
     private Long id;
 
-    @Column(nullable = false)
-    private String title;
-
-    @Column(name = "start_time", nullable = false)
-    private LocalDateTime startTime;
-
-    @Column(name = "end_time", nullable = false)
-    private LocalDateTime endTime;
+    @Column(name = "reminder_title", nullable = false)
+    private String reminderTitle;
 
     @Column(name = "recurrence_days", nullable = false)
     private String recurrenceDays;
@@ -37,6 +31,9 @@ public class Reminder {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;     // 활성화 여부 (기본 true)
+
+    @Column(name = "checked_date", nullable = true)
+    private LocalDateTime checkedDate;   // 체크된 날짜 (null이면 체크되지 않음)
 
     @Column(name = "recurrence_start_date", nullable = true)
     private LocalDateTime recurrenceStartDate;

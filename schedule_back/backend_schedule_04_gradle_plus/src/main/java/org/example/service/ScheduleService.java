@@ -52,6 +52,8 @@ public class ScheduleService {
                 .endTime(scheduleDTO.getEndTime())
                 .categoryId(scheduleDTO.getCategoryId())
                 .recurrenceDays(scheduleDTO.getRecurrenceDays())
+                .recurrenceStartDate(scheduleDTO.getRecurrenceStartDate())
+                .recurrenceEndDate(scheduleDTO.getRecurrenceEndDate())
                 .priority(scheduleDTO.getPriority())
                 .displayOnCalendar(scheduleDTO.getDisplayOnCalendar() != null ? scheduleDTO.getDisplayOnCalendar() : true)
                 .reminderMinutesBefore(reminderMinutesBefore)
@@ -104,6 +106,79 @@ public class ScheduleService {
         Schedule schedule = scheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new RuntimeException("일정을 찾을 수 없습니다."));
 
+        // 반복 일정인지 확인
+        boolean isRecurring = schedule.getRecurrenceDays() != null && 
+                              !schedule.getRecurrenceDays().isEmpty() && 
+                              !schedule.getRecurrenceDays().equals("0,0,0,0,0,0,0") &&
+                              schedule.getRecurrenceDays().contains("1");
+                              
+        if (isRecurring) {
+            // 반복 일정의 경우 - 원본은 그대로 두고 현재 날짜의 일정만 제외한 후, 미룬 일정 생성
+            
+            // 1. 현재 날짜 구하기 - 일정의 시작일로 설정
+            LocalDate currentDate = schedule.getStartTime().toLocalDate();
+            String excludeDateStr = currentDate.toString();
+            
+            // 2. 제외된 날짜 목록에 현재 날짜 추가
+            String excludedDates = schedule.getExcludedDates();
+            if (excludedDates == null || excludedDates.isEmpty()) {
+                schedule.setExcludedDates(excludeDateStr);
+            } else if (!excludedDates.contains(excludeDateStr)) {
+                schedule.setExcludedDates(excludedDates + "," + excludeDateStr);
+            }
+            scheduleRepository.save(schedule);
+            
+            // 3. 미룬 날짜로 새 일정 생성 (일회성)
+            Schedule newSchedule = new Schedule();
+            newSchedule.setTitle(schedule.getTitle());
+            newSchedule.setDescription(schedule.getDescription());
+            newSchedule.setCategoryId(schedule.getCategoryId());
+            newSchedule.setPriority(schedule.getPriority());
+            newSchedule.setDisplayOnCalendar(schedule.getDisplayOnCalendar());
+            newSchedule.setReminderMinutesBefore(schedule.getReminderMinutesBefore());
+            newSchedule.setUser(user);
+            newSchedule.setFirebaseUid(user.getFirebaseUid());
+            // 반복 설정 제거
+            newSchedule.setRecurrenceDays("0,0,0,0,0,0,0");
+            newSchedule.setRecurrenceStartDate(null);
+            newSchedule.setRecurrenceEndDate(null);
+            
+            // 미루기 모드에 따라 새 일정의 시간 설정
+            switch (request.getMode()) {
+                case "1일후":
+                    newSchedule.setStartTime(schedule.getStartTime().plusDays(1));
+                    newSchedule.setEndTime(schedule.getEndTime().plusDays(1));
+                    newSchedule.setReminderTime(schedule.getReminderTime().plusDays(1));
+                    break;
+                case "7일후":
+                    newSchedule.setStartTime(schedule.getStartTime().plusDays(7));
+                    newSchedule.setEndTime(schedule.getEndTime().plusDays(7));
+                    newSchedule.setReminderTime(schedule.getReminderTime().plusDays(7));
+                    break;
+                case "직접설정":
+                    if (request.getCustomReminderTime() != null) {
+                        LocalDateTime customTime = request.getCustomReminderTime();
+                        long daysDifference = java.time.temporal.ChronoUnit.DAYS.between(
+                            schedule.getStartTime().toLocalDate(), 
+                            customTime.toLocalDate()
+                        );
+                        
+                        newSchedule.setReminderTime(customTime);
+                        newSchedule.setStartTime(schedule.getStartTime().plusDays(daysDifference));
+                        newSchedule.setEndTime(schedule.getEndTime().plusDays(daysDifference));
+                    } else {
+                        throw new RuntimeException("customReminderTime이 필요합니다.");
+                    }
+                    break;
+                default:
+                    throw new RuntimeException("잘못된 미루기 모드입니다.");
+            }
+            
+            // 새 일정 저장 및 반환
+            Schedule savedSchedule = scheduleRepository.save(newSchedule);
+            return ScheduleDTO.fromEntity(savedSchedule);
+        } else {
+            // 일반 일정인 경우 - 원래 로직대로 처리
         switch (request.getMode()) {
             case "1일후":
                 // reminderTime, startTime, endTime 모두 1일 후로 미루기
@@ -141,6 +216,7 @@ public class ScheduleService {
         }
         scheduleRepository.save(schedule);
         return ScheduleDTO.fromEntity(schedule);
+        }
     }
 
     @Transactional
@@ -181,7 +257,29 @@ public class ScheduleService {
         
         // 제외할 날짜의 요일이 반복 요일에 포함되는지 확인
         int dayOfWeek = excludeDateOnly.getDayOfWeek().getValue(); // 1(월) ~ 7(일)
-        if (!schedule.getRecurrenceDays().contains(String.valueOf(dayOfWeek))) {
+        
+        boolean isValidDay = false;
+        String recurrenceDays = schedule.getRecurrenceDays();
+        
+        // "1,0,1,0,1,0,0" 형식
+        if (recurrenceDays.split(",").length == 7) {
+            String[] days = recurrenceDays.split(",");
+            if (days[dayOfWeek - 1].equals("1")) {
+                isValidDay = true;
+            }
+        } 
+        // "1,3,5" 형식
+        else if (recurrenceDays.contains(",")) {
+            String[] dayNumbers = recurrenceDays.split(",");
+            for (String day : dayNumbers) {
+                if (day.equals(String.valueOf(dayOfWeek))) {
+                    isValidDay = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!isValidDay) {
             throw new RuntimeException("제외할 날짜가 반복 요일에 포함되지 않습니다.");
         }
         

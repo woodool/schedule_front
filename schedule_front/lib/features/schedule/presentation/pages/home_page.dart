@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:schedule/features/schedule/presentation/widgets/add_button.dart';
+import 'package:schedule/features/schedule/presentation/widgets/recurrence_delete_dialog.dart';
 import '../../domain/models/schedule.dart';
 import '../../domain/models/reminder.dart';
 import '../../domain/models/priority.dart';
@@ -192,44 +193,66 @@ class _HomePageState extends State<HomePage> {
     }
     
     final reminderId = reminder.reminderId.toString();
+    final isChecked = value ?? false;
     
-    // 즉시 UI 업데이트
+    // 체크박스 상태 로컬 업데이트 
     setState(() {
-      _checkedState[reminderId] = value ?? false;
+      _checkedState[reminderId] = isChecked;
       
-      // 체크된 항목은 목록 하단으로 이동하도록 정렬
-      _getActiveReminders();
+      // 체크한 리마인더가 UI에서 바로 사라지지 않도록 데이터 모델도 수정
+      // 여기서는 isActive를 true로 유지하고 checkedDate만 업데이트
+      for (int i = 0; i < _reminders.length; i++) {
+        if (_reminders[i].reminderId == reminder.reminderId) {
+          _reminders[i] = _reminders[i].copyWith(
+            checkedDate: isChecked ? DateTime.now() : null,
+            isActive: true, // isActive는 항상 true로 유지
+          );
+          break;
+        }
+      }
     });
     
     try {
       // 현재 날짜/시간 정보
       final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final todayString = today.toIso8601String();
       
-      // 리마인더 객체 복사 및 isActive 업데이트
-      Reminder updatedReminder = reminder.copyWith(
-        isActive: !(value ?? false), // value true면 isActive false로
-        date: todayString, // 항상 오늘 날짜로 설정
+      // 새로운 토글 체크 API 엔드포인트 호출하기
+      final response = await http.put(
+        Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/toggle-check'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${await FirebaseAuth.instance.currentUser!.getIdToken()}'
+        },
+        body: json.encode({
+          'isChecked': isChecked
+        }),
       );
       
-      // 백엔드 업데이트 (백그라운드에서 처리)
-      _reminderService.updateReminder(updatedReminder).catchError((e) {
-        print('리마인더 업데이트 실패: $e');
-        // 실패 시 체크 상태 원복
-        if (mounted) {
-          setState(() {
-            _checkedState[reminderId] = !(value ?? false);
-          });
-        }
-        return null;
-      });
+      if (response.statusCode != 200) {
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+      
+      // 백엔드 응답에서 업데이트된 리마인더 정보 받기
+      final updatedReminder = Reminder.fromJson(jsonDecode(response.body));
+      
+      // 성공 시에만 전체 목록 다시 로드 (백엔드 응답의 isActive 값을 확인)
+      // _loadData();
     } catch (e) {
       print('리마인더 업데이트 실패: $e');
       // 실패 시 체크 상태 원복
       if (mounted) {
         setState(() {
-          _checkedState[reminderId] = !(value ?? false);
+          _checkedState[reminderId] = !isChecked;
+          
+          // 원래 상태로 복원
+          for (int i = 0; i < _reminders.length; i++) {
+            if (_reminders[i].reminderId == reminder.reminderId) {
+              _reminders[i] = _reminders[i].copyWith(
+                checkedDate: !isChecked ? DateTime.now() : null,
+              );
+              break;
+            }
+          }
         });
       }
     }
@@ -249,22 +272,35 @@ class _HomePageState extends State<HomePage> {
     List<Reminder> filteredReminders = [];
     
     for (var reminder in _reminders) {
-      // 비활성화된 리마인더는 건너뜀
-      if (reminder.isActive != true) continue;
+      // 비활성화된 리마인더는 포함하지 않음 - 이 조건 변경
+      // if (reminder.isActive != true) continue;
       
       final reminderId = reminder.reminderId?.toString() ?? '';
       final isChecked = _checkedState[reminderId] ?? false;
       
-      // 체크된 리마인더가 하루가 지났으면 표시하지 않음
-      final reminderDate = DateTime(
-        reminder.startTime.year,
-        reminder.startTime.month,
-        reminder.startTime.day,
+      // 체크된 리마인더 처리
+      if (isChecked) {
+        // 체크 시점 날짜 확인
+        if (reminder.checkedDate != null) {
+          try {
+            // 체크된 날짜만 추출 (시간 제외)
+            final checkedDay = DateTime(
+              reminder.checkedDate!.year,
+              reminder.checkedDate!.month,
+              reminder.checkedDate!.day,
       );
       
-      // 체크된 리마인더이고 오늘보다 이전 날짜의 리마인더인 경우 제외
-      if (isChecked && reminderDate.isBefore(todayDate)) {
-        continue;
+            // 체크 날짜가 어제 이전이면 (= 체크 후 00시가 지났으면) 목록에서 제외
+            if (checkedDay.isBefore(todayDate)) {
+              continue; // 다음 항목으로
+            }
+            
+            // 체크 날짜가 오늘이면 (= 당일에 체크했으면) 목록에 포함 (절취선으로 표시)
+            // 별도 처리 필요 없이 그대로 진행
+          } catch (e) {
+            print('날짜 파싱 오류: $e');
+          }
+        }
       }
       
       // 반복 리마인더 처리
@@ -320,25 +356,8 @@ class _HomePageState extends State<HomePage> {
             _checkedState[reminderId] = false;
           }
           
-          // 오늘 날짜로 조정된 리마인더 생성
-          final adjustedReminder = reminder.copyWith(
-            startTime: DateTime(
-              todayDate.year,
-              todayDate.month,
-              todayDate.day,
-              reminder.startTime.hour,
-              reminder.startTime.minute,
-            ),
-            endTime: DateTime(
-              todayDate.year,
-              todayDate.month,
-              todayDate.day,
-              reminder.endTime.hour,
-              reminder.endTime.minute,
-            ),
-          );
-          
-          filteredReminders.add(adjustedReminder);
+          // 그대로 리마인더 추가 (startTime/endTime 제거됨)
+          filteredReminders.add(reminder);
         }
       } else {
         // 일반 리마인더의 경우 그냥 추가
@@ -349,8 +368,8 @@ class _HomePageState extends State<HomePage> {
       }
     }
     
-    // 알림 시간순으로 정렬
-    filteredReminders.sort((a, b) => a.startTime.compareTo(b.startTime));
+    // 기본 id순으로 정렬 (startTime이 제거됨)
+    filteredReminders.sort((a, b) => (a.reminderId ?? '').compareTo(b.reminderId ?? ''));
     
     return filteredReminders;
   }
@@ -415,9 +434,11 @@ class _HomePageState extends State<HomePage> {
         // 제외된 날짜 확인 (excludedDates 필드가 있는 경우)
         bool isExcludedDate = false;
         if (schedule.excludedDates != null && schedule.excludedDates!.isNotEmpty) {
-          final selectedDateStr = '${selectedDateOnly.year}-'
-              '${selectedDateOnly.month.toString().padLeft(2, '0')}-'
-              '${selectedDateOnly.day.toString().padLeft(2, '0')}';
+          // yyyy-MM-dd 형식으로 날짜 변환 (월과 일이 한 자리인 경우 앞에 0 추가)
+          final year = selectedDateOnly.year.toString();
+          final month = selectedDateOnly.month.toString().padLeft(2, '0');
+          final day = selectedDateOnly.day.toString().padLeft(2, '0');
+          final selectedDateStr = '$year-$month-$day';
           
           final excludedDatesList = schedule.excludedDates!.split(',');
           isExcludedDate = excludedDatesList.contains(selectedDateStr);
@@ -449,6 +470,9 @@ class _HomePageState extends State<HomePage> {
         }
       }
     }
+    
+    // 시작 시간 순으로 정렬
+    filteredSchedules.sort((a, b) => a.startTime.compareTo(b.startTime));
     
     return filteredSchedules;
   }
@@ -569,14 +593,14 @@ class _HomePageState extends State<HomePage> {
                                 if (_reminders.isEmpty)
                                   Container(
                                     width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
-                                    padding: const EdgeInsets.all(5),
+                                    padding: const EdgeInsets.all(0), // 패딩 제거
                                     height: 100, // 최소 높이 설정
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Padding(
-                                      padding: EdgeInsets.all(10),
+                                      padding: EdgeInsets.all(0), // 패딩 제거
                                       child: Center(
                                         child: Text(
                                           '등록된 리마인더가 없습니다',
@@ -595,14 +619,14 @@ class _HomePageState extends State<HomePage> {
                                 else if (_getActiveReminders().isEmpty)
                                   Container(
                                     width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
-                                    padding: const EdgeInsets.all(5),
+                                    padding: const EdgeInsets.all(0), // 패딩 제거
                                     height: 100, // 최소 높이 설정
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Padding(
-                                      padding: EdgeInsets.all(10),
+                                      padding: EdgeInsets.all(0), // 패딩 제거
                                       child: Center(
                                         child: Text(
                                           '활성화된 리마인더가 없습니다',
@@ -621,7 +645,7 @@ class _HomePageState extends State<HomePage> {
                                 else
                                   Container(
                                     width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
-                                    padding: const EdgeInsets.symmetric(vertical: 5),
+                                    padding: const EdgeInsets.symmetric(vertical: 15), // 상하단 여백 15픽셀
                                     constraints: const BoxConstraints(minHeight: 100), // 최소 높이 설정
                                     decoration: BoxDecoration(
                                       color: Colors.white,
@@ -631,7 +655,8 @@ class _HomePageState extends State<HomePage> {
                                       shrinkWrap: true,
                                       physics: const NeverScrollableScrollPhysics(),
                                       itemCount: _getActiveReminders().length,
-                                      separatorBuilder: (context, index) => const SizedBox(height: 5),
+                                      padding: EdgeInsets.zero, // 패딩 제거
+                                      separatorBuilder: (context, index) => const SizedBox(height: 5), // 아이템 간 간격 5픽셀
                                       itemBuilder: (context, index) {
                                         final reminder = _getActiveReminders()[index];
                                         final reminderId = reminder.reminderId?.toString() ?? '';
@@ -669,7 +694,7 @@ class _HomePageState extends State<HomePage> {
                                                     _showReminderOptionsDialog(reminder);
                                                   },
                                                   child: Text(
-                                                    reminder.title,
+                                                    reminder.reminder_title,
                                                     style: TextStyle(
                                                       fontFamily: 'Pretendard',
                                                       fontSize: 16,
@@ -741,14 +766,14 @@ class _HomePageState extends State<HomePage> {
                                 else if (_getSchedulesForSelectedDate().isEmpty)
                                   Container(
                                     width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
-                                    padding: const EdgeInsets.all(5),
+                                    padding: const EdgeInsets.all(0), // 패딩 제거
                                     height: 100, // 최소 높이 설정
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Padding(
-                                      padding: EdgeInsets.all(10),
+                                      padding: EdgeInsets.all(0), // 패딩 제거
                                       child: Center(
                                         child: Text(
                                           '선택된 날짜의 일정이 없습니다',
@@ -767,7 +792,7 @@ class _HomePageState extends State<HomePage> {
                                 else
                                   Container(
                                     width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
-                                    padding: const EdgeInsets.all(5),
+                                    padding: const EdgeInsets.symmetric(vertical: 15), // 상하단 여백 15픽셀
                                     constraints: const BoxConstraints(minHeight: 100), // 최소 높이 설정
                                     decoration: BoxDecoration(
                                       color: Colors.white,
@@ -777,30 +802,31 @@ class _HomePageState extends State<HomePage> {
                                       shrinkWrap: true,
                                       physics: const NeverScrollableScrollPhysics(),
                                       itemCount: _getSchedulesForSelectedDate().length,
-                                      separatorBuilder: (context, index) => const SizedBox(height: 5),
+                                      padding: EdgeInsets.zero, // 패딩 제거
+                                      separatorBuilder: (context, index) => const SizedBox(height: 5), // 아이템 간 간격 5픽셀
                                       itemBuilder: (context, index) {
                                         final schedule = _getSchedulesForSelectedDate()[index];
                                         // 우선순위에 따른 색상 설정
                                         Color priorityColor;
                                         switch(schedule.priority) {
                                           case 1:
-                                            priorityColor = const Color(0xFFEC7F7F); // 높음 (빨강)
+                                            priorityColor = const Color(0xFFFF9E99); // 변경된 높음 (빨강)
                                             break;
                                           case 2:
-                                            priorityColor = const Color(0xFFFFF0A3); // 중간 (노랑)
+                                            priorityColor = const Color(0xFFFFEE8C); // 변경된 중간 (노랑)
                                             break;
                                           case 3:
-                                            priorityColor = const Color(0xFFB4E07B); // 낮음 (초록)
+                                            priorityColor = const Color(0xFFADEBB3); // 변경된 낮음 (초록)
                                             break;
                                           default:
-                                            priorityColor = const Color(0xFFA5A5A5); // 없음 (회색)
+                                            priorityColor = const Color(0xFFB8B4A3); // 변경된 없음 (베이지)
                                         }
                                         
                                         final startTimeStr = DateFormat('HH:mm').format(schedule.startTime);
                                         final endTimeStr = DateFormat('HH:mm').format(schedule.endTime);
                                         
                                         return Container(
-                                          padding: const EdgeInsets.all(12),
+                                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                                           decoration: BoxDecoration(
                                             border: Border(
                                               bottom: BorderSide(color: Colors.grey.shade100),
@@ -950,7 +976,7 @@ class _HomePageState extends State<HomePage> {
                       reminder.recurrenceDays.contains("1");
                       
     if (isRecurrent) {
-      // 반복 일정인 경우 - 현재 인스턴스만 삭제 또는 전체 삭제 옵션 제공
+      // 반복 일정인 경우 - 단순화된 옵션 제공
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -983,7 +1009,8 @@ class _HomePageState extends State<HomePage> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              // 현재 리마인더만 삭제 버튼
+              
+              // 리마인더만 삭제 버튼
               InkWell(
                 onTap: () {
                   Navigator.pop(context);
@@ -991,14 +1018,15 @@ class _HomePageState extends State<HomePage> {
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey.shade200),
-                    ),
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
-                    '현재 리마인더만 삭제',
+                    '이 리마인더만 삭제',
                     style: TextStyle(
                       fontFamily: 'Pretendard',
                       fontSize: 16,
@@ -1009,21 +1037,27 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              // 전체 반복 리마인더 삭제 버튼
+              
+              // 전체 시리즈 삭제 버튼
               InkWell(
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteReminder(reminder);
+                  _deleteEntireReminder(reminder.reminderId.toString());
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade200),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: const Text(
-                    '전체 반복 리마인더 삭제',
+                    '전체 시리즈 삭제',
                     style: TextStyle(
                       fontFamily: 'Pretendard',
                       fontSize: 16,
-                      fontWeight: FontWeight.w400,
+                      fontWeight: FontWeight.w500,
                       color: Colors.red,
                     ),
                     textAlign: TextAlign.center,
@@ -1032,91 +1066,79 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                '취소',
-                style: TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-          ],
         ),
       );
     } else {
-      // 일반 리마인더인 경우 - 그냥 삭제만 물어봄
-      showDialog(
+      // 일반 리마인더
+      _deleteReminder(reminder);
+    }
+  }
+
+  Future<void> _deleteReminder(Reminder reminder) async {
+    final bool isRecurring = reminder.recurrenceDays.isNotEmpty &&
+                            reminder.recurrenceDays != "0,0,0,0,0,0,0";
+    
+    if (!isRecurring) {
+      // 단순 확인 다이얼로그
+      final bool? result = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          title: const Text(
-            '리마인더 삭제',
-            style: TextStyle(
-              fontFamily: 'Pretendard',
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.black,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          content: const Text(
-            '이 리마인더를 삭제하시겠습니까?',
-            style: TextStyle(
-              fontFamily: 'Pretendard',
-              fontSize: 16,
-              color: Colors.black,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          title: const Text('리마인더 삭제'),
+          content: const Text('이 리마인더를 삭제하시겠습니까?'),
           actions: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    '취소',
-                    style: TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.black,
-                    ),
-                  ),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('취소'),
                 ),
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _deleteReminder(reminder);
-                  },
-                  child: const Text(
-                    '삭제',
-                    style: TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-              ],
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('삭제', style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
       );
-    }
+      
+      if (result != true) {
+        // 취소됨
+        return;
+      }
+      
+      try {
+        final reminderId = reminder.reminderId;
+        if (reminderId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('리마인더 ID가 없습니다')),
+          );
+          return;
   }
   
-  // 현재 리마인더 인스턴스만 제외 (반복 일정에서 특정 날짜만 제외)
-  Future<void> _deleteCurrentReminderOccurrence(Reminder reminder) async {
+        // 리마인더 삭제
+        await _deleteEntireReminder(reminderId.toString());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('리마인더가 삭제되었습니다')),
+        );
+        
+        // 리마인더 다시 로드
+        _loadData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
+          );
+        }
+      }
+    } else {
+      // 반복 리마인더의 경우 RecurrenceDeleteDialog 사용
+      final result = await showDialog(
+        context: context,
+        builder: (context) => RecurrenceDeleteDialog(isRecurring: true),
+      );
+      
+      if (result == null) {
+        // 취소됨
+        return;
+      }
+      
     try {
       final reminderId = reminder.reminderId;
       if (reminderId == null) {
@@ -1126,48 +1148,126 @@ class _HomePageState extends State<HomePage> {
         return;
       }
       
-      // 선택된 날짜 정보
-      final selectedDateOnly = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
+        // 반복 리마인더 삭제 옵션에 따라 처리
+        switch (result) {
+          case RecurrenceDeleteMode.single:
+            await _deleteCurrentReminderOccurrence(reminder);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('해당 리마인더만 삭제되었습니다')),
+            );
+            break;
+          case RecurrenceDeleteMode.thisAndFuture:
+            await _deleteThisAndFutureReminderOccurrences(reminder);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('이 리마인더 및 향후 리마인더가 삭제되었습니다')),
+            );
+            break;
+          case RecurrenceDeleteMode.allSeries:
+            await _deleteEntireReminder(reminderId.toString());
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('전체 반복 리마인더가 삭제되었습니다')),
+            );
+            break;
+        }
+        
+        // 리마인더 다시 로드
+        _loadData();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
       );
-      
+        }
+      }
+    }
+  }
+  
+  // 현재 리마인더만 삭제 (특정 날짜 제외)
+  Future<void> _deleteCurrentReminderOccurrence(Reminder reminder) async {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
       
       final idToken = await user.getIdToken(true);
+    final reminderId = reminder.reminderId!;
       
-      // 현재 인스턴스만 삭제하는 API 호출
-      final String url = '${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence';
+    // 현재 날짜
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
       
-      final response = await http.post(
-        Uri.parse(url),
+    // 반복 리마인더에서 특정 날짜 제외하는 API 호출
+    final excludeResponse = await http.post(
+      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $idToken',
         },
         body: json.encode({
-          'excludeDate': selectedDateOnly.toIso8601String(),
+        'excludeDate': todayDate.toIso8601String(),
         }),
       );
       
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('현재 리마인더만 삭제되었습니다')),
-          );
-          _loadData();
-        }
-      } else {
-        throw Exception('리마인더 인스턴스 삭제 실패: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('리마인더 인스턴스 삭제 실패: $e')),
-        );
-      }
+    if (excludeResponse.statusCode != 200) {
+      throw Exception('반복 리마인더에서 날짜 제외 실패: ${excludeResponse.statusCode}');
+    }
+  }
+  
+  // 현재 및 향후 리마인더 삭제 (종료일 변경)
+  Future<void> _deleteThisAndFutureReminderOccurrences(Reminder reminder) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    
+    final idToken = await user.getIdToken(true);
+    final reminderId = reminder.reminderId!;
+    
+    // 현재 날짜
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    
+    // 원본 리마인더의 시작일을 가져옴
+    final originalStartDate = reminder.recurrenceStartDate;
+    
+    // 원본 리마인더를 삭제하기 전에 이전 리마인더만 따로 저장하는 리마인더를 만들기
+    if (originalStartDate != null && originalStartDate.isBefore(todayDate)) {
+      // 복사본 생성 - 종료일을 현재 날짜 전날로 변경 (이전 리마인더만 유지)
+      final previousDay = todayDate.subtract(const Duration(days: 1));
+      
+      // 원본 리마인더의 복사본 생성 - 이전 리마인더만 유지하기 위한 목적
+      final previousReminder = Reminder(
+        reminder_title: reminder.reminder_title,
+        recurrenceDays: reminder.recurrenceDays,
+        reminderMinutesBefore: reminder.reminderMinutesBefore,
+        isActive: reminder.isActive,
+        date: reminder.date,
+        checkedDate: null,
+        recurrenceStartDate: originalStartDate,
+        recurrenceEndDate: previousDay, // 종료일을 현재 날짜 전날로 변경
+        excludedDates: reminder.excludedDates,
+      );
+      
+      // 이전 리마인더 생성 API 호출
+      await _reminderService.saveReminder(previousReminder);
+    }
+    
+    // 원본 리마인더 삭제
+    await _deleteEntireReminder(reminderId.toString());
+  }
+
+  // 리마인더 전체 삭제 메서드
+  Future<void> _deleteEntireReminder(String reminderId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    
+    final idToken = await user.getIdToken(true);
+    
+    final response = await http.delete(
+      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId'),
+      headers: {
+        'Authorization': 'Bearer $idToken',
+      },
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('리마인더 삭제 실패: ${response.statusCode}');
     }
   }
 
@@ -1462,79 +1562,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 리마인더 삭제
-  Future<void> _deleteReminder(Reminder reminder) async {
-    try {
-      final reminderId = reminder.reminderId;
-      if (reminderId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리마인더 ID가 없습니다')),
-        );
-        return;
-      }
-
-      await _reminderService.deleteReminder(reminderId.toString());
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리마인더가 삭제되었습니다')),
-        );
-        _loadData(); // 데이터 새로고침
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('리마인더 삭제 실패: $e')),
-        );
-      }
-    }
-  }
-
-  // 일정 삭제
-  Future<void> _deleteSchedule(Schedule schedule) async {
-    try {
-      final scheduleId = schedule.scheduleId;
-      if (scheduleId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('일정 ID가 없습니다')),
-        );
-        return;
-      }
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-      final idToken = await user.getIdToken(true);
-
-      final String url = '${ApiConfig.schedulesEndpoint}/$scheduleId';
-      print('삭제 요청 URL: $url');
-      
-      final response = await http.delete(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('일정이 삭제되었습니다')),
-          );
-          _loadData(); // 데이터 새로고침
-        }
-      } else {
-        throw Exception('일정 삭제 실패: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('일정 삭제 실패: $e')),
-        );
-      }
-    }
-  }
-
   // 반복 일정 삭제 다이얼로그
   void _showRecurrenceDeleteDialog(Schedule schedule) {
     showDialog(
@@ -1729,6 +1756,132 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('일정 인스턴스 처리 오류: $e')),
+        );
+      }
+    }
+  }
+
+  // 일정 삭제 메서드 추가
+  Future<void> _deleteSchedule(Schedule schedule) async {
+    final bool isRecurring = schedule.recurrenceDays != null && 
+                            schedule.recurrenceDays!.isNotEmpty &&
+                            schedule.recurrenceDays != "0,0,0,0,0,0,0";
+    
+    // 삭제 다이얼로그 표시
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isRecurring ? '반복 일정 삭제' : '일정 삭제'),
+        content: Text(isRecurring ? 
+          '이 반복 일정을 삭제하시겠습니까?' : 
+          '이 일정을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != true) {
+      // 취소됨
+      return;
+    }
+    
+    try {
+      final scheduleId = schedule.scheduleId;
+      if (scheduleId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정 ID가 없습니다')),
+        );
+        return;
+      }
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+      
+      final idToken = await user.getIdToken(true);
+      
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.schedulesEndpoint}/$scheduleId'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정이 삭제되었습니다')),
+        );
+        _loadData(); // 데이터 새로고침
+      } else {
+        throw Exception('일정 삭제 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('일정 삭제 실패: $e')),
+        );
+      }
+    }
+  }
+
+  // 현재 리마인더 날짜만 제외 (반복 일정에서 특정 날짜만 제외)
+  Future<void> _excludeCurrentReminderDate(Reminder reminder) async {
+    try {
+      final reminderId = reminder.reminderId;
+      if (reminderId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('리마인더 ID가 없습니다')),
+        );
+        return;
+      }
+      
+      // 선택된 날짜 정보
+      final selectedDateOnly = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      );
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+      
+      final idToken = await user.getIdToken(true);
+      
+      // 현재 인스턴스만 삭제하는 API 호출
+      final String url = '${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence';
+      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: json.encode({
+          'excludeDate': selectedDateOnly.toIso8601String(),
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('현재 리마인더만 삭제되었습니다')),
+          );
+          _loadData();
+        }
+      } else {
+        throw Exception('리마인더 인스턴스 삭제 실패: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('리마인더 인스턴스 삭제 실패: $e')),
         );
       }
     }

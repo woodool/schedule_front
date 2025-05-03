@@ -15,8 +15,6 @@ class AddReminderPage extends StatefulWidget {
 
 class _AddReminderPageState extends State<AddReminderPage> {
   final TextEditingController _titleController = TextEditingController();
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now();
   List<bool> _selectedDays = [false, false, false, false, false, false, false];
   NotificationType _notificationType = NotificationType.none;
   int? _customMinutes;
@@ -39,15 +37,8 @@ class _AddReminderPageState extends State<AddReminderPage> {
     }
 
     try {
-      // 날짜 및 시간을 현재 시간으로 자동 설정
-      final now = DateTime.now();
-      _startDate = now;
-      _endDate = now.add(const Duration(minutes: 30));
-      
       final reminder = Reminder(
-        title: _titleController.text,
-        startTime: _startDate,
-        endTime: _endDate,
+        reminder_title: _titleController.text,
         recurrenceDays: _selectedDays.map((day) => day ? '1' : '0').join(','),
         reminderMinutesBefore: _customMinutes,
         recurrenceStartDate: _recurrenceStartDate,
