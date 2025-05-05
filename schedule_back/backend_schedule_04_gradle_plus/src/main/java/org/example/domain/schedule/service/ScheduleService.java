@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -261,5 +262,42 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
                                    .withMinute(original.getMinute());
         default: throw new BadRequestException("잘못된 미루기 모드");
     }
+    }
+
+    //산진 일정 추가
+    @Transactional
+    public List<ScheduleResponseDTO> photoAddSchedule(PhotoListRequestDTO requestDTO, String firebaseUid) {
+        User user = userRepo.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new UnauthorizedException("사용자 없음"));
+
+        Integer reminderMinutesBefore = 10;
+        List<Schedule> savedSchedules = new ArrayList<>();
+
+        for (PhotoScheduleDTO dto : requestDTO.getPhotoListScheduleDTO()) {
+            LocalDateTime reminderTime = dto.getStartTime() != null
+                    ? dto.getStartTime().minusMinutes(reminderMinutesBefore)
+                    : LocalDateTime.now();
+
+            Schedule schedule = Schedule.builder()
+                    .title(dto.getTitle())
+                    .description(dto.getDescription())
+                    .startTime(dto.getStartTime())
+                    .endTime(dto.getEndTime())
+                    .recurrenceDays(dto.getRecurrenceDays())
+                    .recurrenceStartDate(dto.getRecurrenceStartDate())
+                    .recurrenceEndDate(dto.getRecurrenceEndDate())
+                    .reminderMinutesBefore(reminderMinutesBefore)
+                    .reminderTime(reminderTime)
+                    .firebaseUid(user.getFirebaseUid())
+                    .user(user)
+                    .build();
+
+            Schedule savedSchedule = repo.save(schedule);
+            savedSchedules.add(savedSchedule);
+        }
+        // 📌 List<ScheduleDTO>로 변환해서 반환
+        return savedSchedules.stream()
+                .map(ScheduleResponseDTO::fromEntity)
+                .collect(Collectors.toList());
     }
 }

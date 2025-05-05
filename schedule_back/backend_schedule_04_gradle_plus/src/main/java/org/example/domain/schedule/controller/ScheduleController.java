@@ -121,4 +121,13 @@ public class ScheduleController {
         ScheduleResponseDTO result = service.postpone(id, dto, uid);
         return ResponseEntity.ok(result);
     }
+
+    /** 8) 사진 추가 기능 */
+    @PostMapping("/bulk")
+    public ResponseEntity<List<ScheduleResponseDTO>> photoAddSchedule(
+            @RequestBody PhotoListRequestDTO requestDTO,
+            Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        return ResponseEntity.ok(service.photoAddSchedule(requestDTO, firebaseUid));
+    }
 }
