@@ -4,6 +4,7 @@ import 'package:schedule/features/schedule/presentation/widgets/recurrence_delet
 import '../../domain/models/schedule.dart';
 import '../../domain/models/reminder.dart';
 import '../../domain/models/priority.dart';
+import '../../domain/models/Recurrence_option.Dart';
 import '../../domain/services/schedule_service.dart';
 import '../../domain/services/reminder_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -138,10 +139,26 @@ class _HomePageState extends State<HomePage> {
         _reminders = reminders;
         _isLoading = false;
         
-        // 체크박스 상태 초기화
+        // 체크박스 상태 초기화 - 개선된 방식
+        _checkedState.clear(); // 기존 상태 초기화
         for (var reminder in _reminders) {
           if (reminder.reminderId != null) {
-            _checkedState[reminder.reminderId!.toString()] = reminder.isActive == false;
+            // 서버에서 가져온 상태 사용 (checkedDate가 존재하고 오늘 날짜이면 체크된 상태)
+            bool isChecked = false;
+            if (reminder.checkedDate != null) {
+              final today = DateTime.now();
+              final checkedDay = DateTime(
+                reminder.checkedDate!.year,
+                reminder.checkedDate!.month,
+                reminder.checkedDate!.day,
+              );
+              final todayDay = DateTime(today.year, today.month, today.day);
+              
+              // 오늘 체크된 항목이면 체크 상태로 표시
+              isChecked = checkedDay.isAtSameMomentAs(todayDay);
+              print('리마인더 ${reminder.reminder_title} - 체크날짜: ${reminder.checkedDate}, 체크상태: $isChecked');
+            }
+            _checkedState[reminder.reminderId!.toString()] = isChecked;
           }
         }
       });
@@ -232,11 +249,20 @@ class _HomePageState extends State<HomePage> {
         throw Exception('API 호출 실패: ${response.statusCode}');
       }
       
-      // 백엔드 응답에서 업데이트된 리마인더 정보 받기
+      print('리마인더 체크 상태 업데이트 성공: $isChecked');
+      
+      // 백엔드 응답에서 업데이트된 리마인더 정보를 받아 저장
       final updatedReminder = Reminder.fromJson(jsonDecode(response.body));
       
-      // 성공 시에만 전체 목록 다시 로드 (백엔드 응답의 isActive 값을 확인)
-      // _loadData();
+      // 로컬 상태 업데이트 (체크 날짜 정보)
+      setState(() {
+        for (int i = 0; i < _reminders.length; i++) {
+          if (_reminders[i].reminderId == reminder.reminderId) {
+            _reminders[i] = updatedReminder;
+            break;
+          }
+        }
+      });
     } catch (e) {
       print('리마인더 업데이트 실패: $e');
       // 실패 시 체크 상태 원복
@@ -259,7 +285,6 @@ class _HomePageState extends State<HomePage> {
   }
   
   // 리마인더 리스트를 가져오는 메서드를 완전히 변경
-  // 날짜별 필터링이 아닌 통합 리스트로 변경
   List<Reminder> _getActiveReminders() {
     // 오늘 날짜 (시스템 시간 기준)
     final todayDate = DateTime(
@@ -272,36 +297,31 @@ class _HomePageState extends State<HomePage> {
     List<Reminder> filteredReminders = [];
     
     for (var reminder in _reminders) {
-      // 비활성화된 리마인더는 포함하지 않음 - 이 조건 변경
-      // if (reminder.isActive != true) continue;
+      // 비활성화된 리마인더는 포함하지 않음
+      if (reminder.isActive != true) continue;
       
       final reminderId = reminder.reminderId?.toString() ?? '';
-      final isChecked = _checkedState[reminderId] ?? false;
       
-      // 체크된 리마인더 처리
-      if (isChecked) {
-        // 체크 시점 날짜 확인
-        if (reminder.checkedDate != null) {
-          try {
-            // 체크된 날짜만 추출 (시간 제외)
-            final checkedDay = DateTime(
-              reminder.checkedDate!.year,
-              reminder.checkedDate!.month,
-              reminder.checkedDate!.day,
-      );
-      
-            // 체크 날짜가 어제 이전이면 (= 체크 후 00시가 지났으면) 목록에서 제외
-            if (checkedDay.isBefore(todayDate)) {
-              continue; // 다음 항목으로
-            }
-            
-            // 체크 날짜가 오늘이면 (= 당일에 체크했으면) 목록에 포함 (절취선으로 표시)
-            // 별도 처리 필요 없이 그대로 진행
-          } catch (e) {
-            print('날짜 파싱 오류: $e');
-          }
+      // 체크 상태 확인 - 서버에서 가져온 checkedDate 기준으로 판단
+      bool isChecked = false;
+      if (reminder.checkedDate != null) {
+        final checkedDay = DateTime(
+          reminder.checkedDate!.year,
+          reminder.checkedDate!.month,
+          reminder.checkedDate!.day,
+        );
+        
+        // 체크된 날짜가 오늘이면 체크된 상태로 표시
+        isChecked = checkedDay.isAtSameMomentAs(todayDate);
+        
+        // 체크된 날짜가 어제 이전이면 (= 체크 후 00시가 지났으면) 목록에서 제외
+        if (checkedDay.isBefore(todayDate)) {
+          continue; // 다음 항목으로
         }
       }
+      
+      // 체크박스 상태 로컬 상태 업데이트
+      _checkedState[reminderId] = isChecked;
       
       // 반복 리마인더 처리
       if (reminder.recurrenceDays != null && reminder.recurrenceDays.contains('1')) {
@@ -351,25 +371,30 @@ class _HomePageState extends State<HomePage> {
         
         // 반복 패턴에 오늘이 포함되면 리마인더 추가
         if (shouldShowToday) {
-          // 체크박스 상태 확인
-          if (!_checkedState.containsKey(reminderId)) {
-            _checkedState[reminderId] = false;
-          }
-          
-          // 그대로 리마인더 추가 (startTime/endTime 제거됨)
           filteredReminders.add(reminder);
         }
       } else {
         // 일반 리마인더의 경우 그냥 추가
-        if (!_checkedState.containsKey(reminderId)) {
-          _checkedState[reminderId] = false;
-        }
         filteredReminders.add(reminder);
       }
     }
     
-    // 기본 id순으로 정렬 (startTime이 제거됨)
-    filteredReminders.sort((a, b) => (a.reminderId ?? '').compareTo(b.reminderId ?? ''));
+    // 체크 상태에 따라 정렬 - 체크되지 않은 항목이 먼저 오고, 체크된 항목은 뒤에 배치
+    filteredReminders.sort((a, b) {
+      final aId = a.reminderId?.toString() ?? '';
+      final bId = b.reminderId?.toString() ?? '';
+      
+      final aChecked = _checkedState[aId] ?? false;
+      final bChecked = _checkedState[bId] ?? false;
+      
+      // 체크 상태 비교 (false가 먼저, true가 나중에)
+      if (aChecked != bChecked) {
+        return aChecked ? 1 : -1;
+      }
+      
+      // 체크 상태가 같으면 ID 기준으로 정렬
+      return aId.compareTo(bId);
+    });
     
     return filteredReminders;
   }
@@ -385,6 +410,8 @@ class _HomePageState extends State<HomePage> {
     // 필터링된 일정 목록
     List<Schedule> filteredSchedules = [];
     
+    print('\n[${_selectedDate.toString().split(' ')[0]} 일정 필터링]');
+    
     for (var schedule in _schedules) {
       // 1. 일반 일정: 시작 날짜가 선택한 날짜와 일치하는 경우
       final scheduleDate = DateTime(
@@ -394,20 +421,30 @@ class _HomePageState extends State<HomePage> {
       );
       
       if (scheduleDate.isAtSameMomentAs(selectedDateOnly)) {
+        print('일반 일정 추가: ${schedule.title} (${schedule.startTime})');
         filteredSchedules.add(schedule);
         continue; // 이미 추가된 일정은 반복 체크 무시
       }
       
       // 2. 반복 일정: recurrenceDays 설정이 있는 경우
       if (schedule.recurrenceDays != null && schedule.recurrenceDays!.isNotEmpty) {
-        // 요일 비교를 위해 선택된, 날짜의 요일 가져오기 (1: 월요일, 7: 일요일)
-        final selectedWeekday = _selectedDate.weekday;
+        // 디버그 출력 - 모든 일정 정보 확인
+        print('반복 일정 검토 중: ${schedule.title}');
+        print('  선택 날짜: $_selectedDate');
+        print('  반복 패턴: ${schedule.recurrenceDays}');
+        print('  반복 기간: ${schedule.recurrenceStartDate} ~ ${schedule.recurrenceEndDate}');
         
-        // 반복 요일 목록을 parsing
+        // 반복 요일 패턴 파싱 (0,0,0,0,0,0,0 형식)
         final List<String> recurrenceDaysList = schedule.recurrenceDays!.split(',');
         
-        // 반복 기간 체크 (시작일/종료일이 설정된 경우)
-        bool isWithinRecurrencePeriod = true;
+        // 반복 일정이 아닌 경우 건너뛰기 (모든 값이 0)
+        if (!schedule.recurrenceDays!.contains("1")) {
+          print('  반복 패턴 없음 (모두 0)');
+          continue;
+        }
+        
+        // *** 반복 기간 체크 (시작일/종료일이 설정된 경우) ***
+        // 시작일 체크를 가장 먼저 수행 - 시작일 이전에는 무조건 표시하지 않음
         if (schedule.recurrenceStartDate != null) {
           // 선택된 날짜가 반복 시작일보다 이전이면 표시하지 않음
           final startDateOnly = DateTime(
@@ -415,20 +452,33 @@ class _HomePageState extends State<HomePage> {
             schedule.recurrenceStartDate!.month,
             schedule.recurrenceStartDate!.day,
           );
+          
+          print('  시작일 비교: 선택일($selectedDateOnly) vs 시작일($startDateOnly)');
           if (selectedDateOnly.isBefore(startDateOnly)) {
-            isWithinRecurrencePeriod = false;
+            print('  반복 기간 체크: 선택일이 시작일보다 이전임 -> 표시 안함');
+            continue; // 시작일 이전이면 즉시 다음 일정으로 넘어감
           }
         }
-        if (isWithinRecurrencePeriod && schedule.recurrenceEndDate != null) {
+        
+        // 종료일 체크
+        bool isWithinRecurrencePeriod = true;
+        if (schedule.recurrenceEndDate != null) {
           // 선택된 날짜가 반복 종료일보다 이후면 표시하지 않음
           final endDateOnly = DateTime(
             schedule.recurrenceEndDate!.year,
             schedule.recurrenceEndDate!.month,
             schedule.recurrenceEndDate!.day,
           );
+          
+          print('  종료일 비교: 선택일($selectedDateOnly) vs 종료일($endDateOnly)');
           if (selectedDateOnly.isAfter(endDateOnly)) {
             isWithinRecurrencePeriod = false;
+            print('  반복 기간 체크: 선택일이 종료일보다 이후임 -> 표시 안함');
           }
+        }
+        
+        if (!isWithinRecurrencePeriod) {
+          continue; // 종료일 이후면 다음 일정으로 넘어감
         }
         
         // 제외된 날짜 확인 (excludedDates 필드가 있는 경우)
@@ -442,14 +492,78 @@ class _HomePageState extends State<HomePage> {
           
           final excludedDatesList = schedule.excludedDates!.split(',');
           isExcludedDate = excludedDatesList.contains(selectedDateStr);
+          
+          if (isExcludedDate) {
+            print('  제외된 날짜임: $selectedDateStr');
+            continue; // 제외된 날짜면 다음 일정으로 넘어감
+          }
         }
         
-        // 선택한 날짜의 요일이 반복 요일에 포함되는지 확인하고, 반복 기간 내에 있고, 제외 날짜가 아닌지 확인
-        if (recurrenceDaysList.contains(selectedWeekday.toString()) && 
+        // 오류 가능성이 있는 부분 - 요일 인덱스 변환
+        // Dart의 weekday: 1(월요일)~7(일요일)
+        // 백엔드 recurrenceDays: [월,화,수,목,금,토,일] 순서로 1~7 인덱스 사용 (1=월요일, 7=일요일)
+        
+        // 선택된 요일을 백엔드 인덱스로 변환 - 새로운 백엔드는 Dart와 동일한 인덱스 사용
+        int dayIndex = selectedDateOnly.weekday - 1; // 배열 인덱스는 0부터 시작하므로 1을 빼줌
+        
+        // 요일별 처리 추가
+        String dayName = '';
+        switch(selectedDateOnly.weekday) {
+          case 1: dayName = '월요일'; break;
+          case 2: dayName = '화요일'; break;
+          case 3: dayName = '수요일'; break;
+          case 4: dayName = '목요일'; break;
+          case 5: dayName = '금요일'; break;
+          case 6: dayName = '토요일'; break;
+          case 7: dayName = '일요일'; break;
+        }
+        
+        // 디버그 출력
+        print('  현재 요일: $dayName (dart: ${selectedDateOnly.weekday}, 배열 인덱스: $dayIndex)');
+        
+        bool patternMatch = false;
+        if (recurrenceDaysList.length == 7) {
+          patternMatch = recurrenceDaysList[dayIndex] == "1";
+          print('  패턴 일치 여부: $patternMatch (인덱스 $dayIndex의 값: ${recurrenceDaysList[dayIndex]})');
+          
+          // 모든 패턴 요소 출력
+          for (int i = 0; i < recurrenceDaysList.length; i++) {
+            String dayText = '';
+            switch(i) {
+              case 0: dayText = '월요일'; break;
+              case 1: dayText = '화요일'; break;
+              case 2: dayText = '수요일'; break;
+              case 3: dayText = '목요일'; break;
+              case 4: dayText = '금요일'; break;
+              case 5: dayText = '토요일'; break;
+              case 6: dayText = '일요일'; break;
+            }
+            print('    인덱스 $i ($dayText): ${recurrenceDaysList[i]}');
+          }
+        } else {
+          print('  패턴 길이 오류: ${recurrenceDaysList.length}');
+        }
+        
+        print('  반복 기간 내? $isWithinRecurrencePeriod');
+        
+        // 해당 요일이 반복 패턴에 포함되는지, 반복 기간 내인지, 제외 날짜가 아닌지 확인
+        if (recurrenceDaysList.length == 7 && 
+            recurrenceDaysList[dayIndex] == "1" && 
             isWithinRecurrencePeriod && 
             !isExcludedDate) {
+          
+          print('*** 반복 일정 표시 성공 ***');
+          print('  일정: ${schedule.title}');
+          print('  날짜: $_selectedDate ($dayName, 요일번호: ${selectedDateOnly.weekday})');
+          print('  요일 인덱스: $dayIndex -> 값: ${recurrenceDaysList[dayIndex]}');
+          print('  반복 범위: ${schedule.recurrenceStartDate} ~ ${schedule.recurrenceEndDate}');
+          
           // 일정 복사본 생성 (시작/종료 시간을 선택한 날짜로 조정)
-          Schedule recurrentSchedule = schedule.copyWith(
+          Schedule recurrentSchedule = Schedule(
+            id: schedule.id,
+            title: schedule.title,
+            description: schedule.description,
+            categoryId: schedule.categoryId,
             startTime: DateTime(
               selectedDateOnly.year,
               selectedDateOnly.month,
@@ -464,15 +578,28 @@ class _HomePageState extends State<HomePage> {
               schedule.endTime.hour,
               schedule.endTime.minute,
             ),
+            recurrenceDays: schedule.recurrenceDays,
+            recurrenceStartDate: schedule.recurrenceStartDate,
+            recurrenceEndDate: schedule.recurrenceEndDate,
+            excludedDates: schedule.excludedDates,
+            reminderMinutesBefore: schedule.reminderMinutesBefore,
+            reminderTime: schedule.reminderTime,
+            priority: schedule.priority,
+            displayOnCalendar: schedule.displayOnCalendar,
           );
           
           filteredSchedules.add(recurrentSchedule);
+        } else {
+          print('  반복 일정 표시 조건 불만족 - 표시 안함');
         }
       }
     }
     
     // 시작 시간 순으로 정렬
     filteredSchedules.sort((a, b) => a.startTime.compareTo(b.startTime));
+    
+    // 총 표시할 일정 수 출력
+    print('표시할 총 일정 수: ${filteredSchedules.length}개\n');
     
     return filteredSchedules;
   }
@@ -659,6 +786,7 @@ class _HomePageState extends State<HomePage> {
                                       separatorBuilder: (context, index) => const SizedBox(height: 5), // 아이템 간 간격 5픽셀
                                       itemBuilder: (context, index) {
                                         final reminder = _getActiveReminders()[index];
+                                        // 리마인더 ID와 체크 상태 가져오기
                                         final reminderId = reminder.reminderId?.toString() ?? '';
                                         final isChecked = _checkedState[reminderId] ?? false;
                                         
@@ -685,9 +813,8 @@ class _HomePageState extends State<HomePage> {
                                                         builder: (context) => EditReminderPage(reminder: reminder),
                                                       ),
                                                     ).then((value) {
-                                                      if (value == true) {
-                                                        _loadData();
-                                                      }
+                                                      // 편집 페이지에서 돌아오면 항상 데이터 새로고침
+                                                      _loadData();
                                                     });
                                                   },
                                                   onLongPress: () {
@@ -835,14 +962,13 @@ class _HomePageState extends State<HomePage> {
                                           child: GestureDetector(
                                             onTap: () {
                                               Navigator.push(
-                                                context,
+                                      context,
                                                 MaterialPageRoute(
                                                   builder: (context) => EditSchedulePage(schedule: schedule),
                                                 ),
                                               ).then((value) {
-                                                if (value == true) {
-                                                  _loadData();
-                                                }
+                                                // 일정 편집 페이지에서 돌아오면 항상 데이터 새로고침
+                                                _loadData();
                                               });
                                             },
                                             onLongPress: () {
@@ -873,9 +999,9 @@ class _HomePageState extends State<HomePage> {
                                                         fontWeight: FontWeight.w400,
                                                         color: Color(0xFF767676),
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
+                                  ),
+                              ],
+                            ),
                                                 const SizedBox(width: 8),
                                                 // 우선순위 색상 표시
                                                 Container(
@@ -950,7 +1076,8 @@ class _HomePageState extends State<HomePage> {
             iconPath: 'assets/images/reminder.png',
             onPressed: () {
               Navigator.pushNamed(context, '/add_reminder').then((value) {
-                if (value == true) _loadData();
+                // 리마인더 추가 페이지에서 돌아오면 항상 데이터 새로고침
+                _loadData();
               });
             },
           ),
@@ -959,7 +1086,8 @@ class _HomePageState extends State<HomePage> {
             iconPath: 'assets/images/schedule.png',
             onPressed: () {
               Navigator.pushNamed(context, '/add_schedule').then((value) {
-                if (value == true) _loadData();
+                // 일정 추가 페이지에서 돌아오면 항상 데이터 새로고침
+                _loadData();
               });
             },
           ),
@@ -968,7 +1096,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 리마인더 옵션 다이얼로그 수정
+  // 리마인더 삭제 메서드
   void _showReminderOptionsDialog(Reminder reminder) {
     // 반복 일정인지 확인
     bool isRecurrent = reminder.recurrenceDays.isNotEmpty && 
@@ -976,7 +1104,7 @@ class _HomePageState extends State<HomePage> {
                       reminder.recurrenceDays.contains("1");
                       
     if (isRecurrent) {
-      // 반복 일정인 경우 - 단순화된 옵션 제공
+      // 반복 일정인 경우 - 반복 리마인더 삭제 다이얼로그를 직접 표시
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -1010,11 +1138,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               
-              // 리마인더만 삭제 버튼
+              // 이 리마인더만 삭제 버튼
               InkWell(
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteCurrentReminderOccurrence(reminder);
+                  // 직접 API 호출하여 삭제 처리 - RecurrenceDeleteMode.SINGLE
+                  _deleteRecurringReminder(reminder, RecurrenceDeleteMode.SINGLE);
                 },
                 child: Container(
                   width: double.infinity,
@@ -1042,7 +1171,8 @@ class _HomePageState extends State<HomePage> {
               InkWell(
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteEntireReminder(reminder.reminderId.toString());
+                  // 직접 API 호출하여 삭제 처리 - RecurrenceDeleteMode.ALL
+                  _deleteRecurringReminder(reminder, RecurrenceDeleteMode.ALL);
                 },
                 child: Container(
                   width: double.infinity,
@@ -1066,79 +1196,49 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                '취소',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ],
         ),
       );
     } else {
-      // 일반 리마인더
-      _deleteReminder(reminder);
-    }
-  }
-
-  Future<void> _deleteReminder(Reminder reminder) async {
-    final bool isRecurring = reminder.recurrenceDays.isNotEmpty &&
-                            reminder.recurrenceDays != "0,0,0,0,0,0,0";
-    
-    if (!isRecurring) {
-      // 단순 확인 다이얼로그
-      final bool? result = await showDialog<bool>(
+      // 일반 리마인더 - 확인 다이얼로그 표시
+      showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('리마인더 삭제'),
           content: const Text('이 리마인더를 삭제하시겠습니까?'),
           actions: [
-                TextButton(
-              onPressed: () => Navigator.pop(context, false),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
               child: const Text('취소'),
-                ),
-                TextButton(
-              onPressed: () => Navigator.pop(context, true),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteReminder(reminder);
+              },
               child: const Text('삭제', style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
       );
-      
-      if (result != true) {
-        // 취소됨
-        return;
-      }
-      
-      try {
-        final reminderId = reminder.reminderId;
-        if (reminderId == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('리마인더 ID가 없습니다')),
-          );
-          return;
+    }
   }
   
-        // 리마인더 삭제
-        await _deleteEntireReminder(reminderId.toString());
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리마인더가 삭제되었습니다')),
-        );
-        
-        // 리마인더 다시 로드
-        _loadData();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
-          );
-        }
-      }
-    } else {
-      // 반복 리마인더의 경우 RecurrenceDeleteDialog 사용
-      final result = await showDialog(
-        context: context,
-        builder: (context) => RecurrenceDeleteDialog(isRecurring: true),
-      );
-      
-      if (result == null) {
-        // 취소됨
-        return;
-      }
-      
+  // 통합된 리마인더 삭제 메서드 (반복 리마인더용)
+  Future<void> _deleteRecurringReminder(Reminder reminder, RecurrenceDeleteMode mode) async {
     try {
       final reminderId = reminder.reminderId;
       if (reminderId == null) {
@@ -1148,224 +1248,183 @@ class _HomePageState extends State<HomePage> {
         return;
       }
       
-        // 반복 리마인더 삭제 옵션에 따라 처리
-        switch (result) {
-          case RecurrenceDeleteMode.single:
-            await _deleteCurrentReminderOccurrence(reminder);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('해당 리마인더만 삭제되었습니다')),
-            );
-            break;
-          case RecurrenceDeleteMode.thisAndFuture:
-            await _deleteThisAndFutureReminderOccurrences(reminder);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('이 리마인더 및 향후 리마인더가 삭제되었습니다')),
-            );
-            break;
-          case RecurrenceDeleteMode.allSeries:
-            await _deleteEntireReminder(reminderId.toString());
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('전체 반복 리마인더가 삭제되었습니다')),
-            );
-            break;
-        }
-        
-        // 리마인더 다시 로드
-        _loadData();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
+      String successMessage = '';
+      switch (mode) {
+        case RecurrenceDeleteMode.SINGLE:
+          successMessage = '해당 리마인더만 삭제되었습니다';
+          break;
+        case RecurrenceDeleteMode.ALL:
+          successMessage = '전체 반복 리마인더가 삭제되었습니다';
+          break;
+        default:
+          // FUTURE 또는 기타 케이스 (사용하지 않음)
+          successMessage = '리마인더가 삭제되었습니다';
+          break;
+      }
+      
+      await _reminderService.deleteRecurringReminder(reminderId.toString(), mode);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
       );
-        }
+      
+      // 리마인더 다시 로드
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
+        );
       }
     }
   }
   
-  // 현재 리마인더만 삭제 (특정 날짜 제외)
-  Future<void> _deleteCurrentReminderOccurrence(Reminder reminder) async {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+  // 통합된 리마인더 삭제 메서드 (일반 리마인더용)
+  Future<void> _deleteReminder(Reminder reminder) async {
+    try {
+      final reminderId = reminder.reminderId;
+      if (reminderId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('리마인더 ID가 없습니다')),
+        );
+        return;
+      }
       
-      final idToken = await user.getIdToken(true);
-    final reminderId = reminder.reminderId!;
+      await _reminderService.deleteReminder(reminderId.toString());
       
-    // 현재 날짜
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-      
-    // 반복 리마인더에서 특정 날짜 제외하는 API 호출
-    final excludeResponse = await http.post(
-      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: json.encode({
-        'excludeDate': todayDate.toIso8601String(),
-        }),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('리마인더가 삭제되었습니다')),
       );
       
-    if (excludeResponse.statusCode != 200) {
-      throw Exception('반복 리마인더에서 날짜 제외 실패: ${excludeResponse.statusCode}');
+      // 리마인더 다시 로드
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('리마인더 삭제 중 오류가 발생했습니다: $e')),
+        );
+      }
     }
   }
   
-  // 현재 및 향후 리마인더 삭제 (종료일 변경)
-  Future<void> _deleteThisAndFutureReminderOccurrences(Reminder reminder) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-    
-    final idToken = await user.getIdToken(true);
-    final reminderId = reminder.reminderId!;
-    
-    // 현재 날짜
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-    
-    // 원본 리마인더의 시작일을 가져옴
-    final originalStartDate = reminder.recurrenceStartDate;
-    
-    // 원본 리마인더를 삭제하기 전에 이전 리마인더만 따로 저장하는 리마인더를 만들기
-    if (originalStartDate != null && originalStartDate.isBefore(todayDate)) {
-      // 복사본 생성 - 종료일을 현재 날짜 전날로 변경 (이전 리마인더만 유지)
-      final previousDay = todayDate.subtract(const Duration(days: 1));
-      
-      // 원본 리마인더의 복사본 생성 - 이전 리마인더만 유지하기 위한 목적
-      final previousReminder = Reminder(
-        reminder_title: reminder.reminder_title,
-        recurrenceDays: reminder.recurrenceDays,
-        reminderMinutesBefore: reminder.reminderMinutesBefore,
-        isActive: reminder.isActive,
-        date: reminder.date,
-        checkedDate: null,
-        recurrenceStartDate: originalStartDate,
-        recurrenceEndDate: previousDay, // 종료일을 현재 날짜 전날로 변경
-        excludedDates: reminder.excludedDates,
-      );
-      
-      // 이전 리마인더 생성 API 호출
-      await _reminderService.saveReminder(previousReminder);
+  // 일정 삭제 확인 다이얼로그를 표시합니다.
+  Future<void> _showDeleteConfirmationDialog(Schedule schedule) async {
+    // schedule.id가 null인지 확인
+    if (schedule.id == null) {
+      _showSnackBar('일정 ID가 없습니다');
+      return;
     }
     
-    // 원본 리마인더 삭제
-    await _deleteEntireReminder(reminderId.toString());
-  }
-
-  // 리마인더 전체 삭제 메서드
-  Future<void> _deleteEntireReminder(String reminderId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+    // 반복 일정인지 확인
+    bool isRecurring = schedule.recurrenceDays != null && 
+                      schedule.recurrenceDays!.isNotEmpty &&
+                      schedule.recurrenceDays != '0,0,0,0,0,0,0';
     
-    final idToken = await user.getIdToken(true);
+    if (!isRecurring) {
+      // 반복 아닌 일정 - 바로 삭제 확인
+      bool confirmed = await showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('일정 삭제'),
+            content: const Text('이 일정을 삭제하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('삭제'),
+              ),
+            ],
+          );
+        },
+      ) ?? false;
+      
+      if (confirmed) {
+        // 일반 일정 삭제
+        try {
+          await _scheduleService.deleteSchedule(schedule.id!);
+          _loadData();
+          _showSnackBar('일정이 삭제되었습니다.');
+        } catch (e) {
+          _showSnackBar('일정 삭제 중 오류가 발생했습니다: $e');
+        }
+      }
+      return;
+    }
     
-    final response = await http.delete(
-      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId'),
-      headers: {
-        'Authorization': 'Bearer $idToken',
+    // 반복 일정 - 삭제 옵션 선택 다이얼로그
+    String? option = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('반복 일정 삭제'),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('이 반복 일정을 어떻게 삭제하시겠습니까?'),
+              SizedBox(height: 16),
+              Text('• 이 일정만: 현재 선택한 날짜의 일정만 삭제합니다.'),
+              Text('• 이후 일정: 현재 선택한 날짜부터의 모든 일정을 삭제합니다.'),
+              Text('• 전체 일정: 반복되는 모든 일정을 삭제합니다.'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('SINGLE'),
+              child: const Text('이 일정만'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('ALL'),
+              child: const Text('전체 일정'),
+            ),
+          ],
+        );
       },
     );
     
-    if (response.statusCode != 200) {
-      throw Exception('리마인더 삭제 실패: ${response.statusCode}');
+    if (option == null) return; // 취소됨
+    
+    try {
+      // 현재 선택된 날짜를 발생일자로 사용 
+      DateTime? occurrenceDate;
+      
+      if (option == 'SINGLE' || option == 'ALL') {
+        // 발생일자 지정이 필요한 경우에만 사용
+        occurrenceDate = _selectedDate;
+        print('삭제 발생일 지정: $occurrenceDate (옵션: $option)');
+      }
+      
+      await _scheduleService.deleteSchedule(
+        schedule.id!, 
+        option: option,
+        occurrenceDate: occurrenceDate,
+      );
+      
+      _loadData();
+      _showSnackBar('일정이 삭제되었습니다.');
+    } catch (e) {
+      _showSnackBar('일정 삭제 중 오류가 발생했습니다: $e');
     }
   }
 
-  // 일정 옵션 다이얼로그 (삭제, 미루기 포함)
-  void _showScheduleOptionsDialog(Schedule schedule) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        title: const Text(
-          '일정 옵션',
-          style: TextStyle(
-            fontFamily: 'Pretendard',
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 미루기 버튼
-            InkWell(
-              onTap: () {
-                Navigator.pop(context);
-                _showPostponeDialog(schedule);
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade200),
-                  ),
-                ),
-                child: const Text(
-                  '미루기',
-                  style: TextStyle(
-                    fontFamily: 'Pretendard',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.black,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-            // 삭제 버튼
-            InkWell(
-              onTap: () {
-                Navigator.pop(context);
-                // 반복 일정인지 확인 (recurrenceDays 값이 있으면 반복 일정)
-                if (schedule.recurrenceDays != null && schedule.recurrenceDays!.isNotEmpty) {
-                  _showRecurrenceDeleteDialog(schedule);
-                } else {
-                  _deleteSchedule(schedule);
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: const Text(
-                  '삭제',
-                  style: TextStyle(
-                    fontFamily: 'Pretendard',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.red,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              '취소',
-              style: TextStyle(
-                fontFamily: 'Pretendard',
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  // 스낵바를 표시합니다.
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
   }
-
-  // 미루기 다이얼로그
+  
+  // 일정 미루기 대화상자
   void _showPostponeDialog(Schedule schedule) {
     showDialog(
       context: context,
@@ -1479,7 +1538,7 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
+  
   // 날짜/시간 선택기
   void _showDateTimePicker(Schedule schedule) async {
     final DateTime? selectedDate = await showDatePicker(
@@ -1520,38 +1579,19 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-      final idToken = await user.getIdToken(true);
-
-      // API 요청 본문 작성
-      final requestBody = {
-        'mode': mode,
-        if (customDateTime != null) 'customReminderTime': customDateTime.toIso8601String()
-      };
-
-      final String url = '${ApiConfig.schedulesEndpoint}/$scheduleId/postpone';
-      print('미루기 요청 URL: $url');
-      
-      final response = await http.put(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: json.encode(requestBody),
+      // 백엔드 API 호출로 미루기 처리
+      await _scheduleService.postponeSchedule(
+        scheduleId,
+        mode,
+        custom: customDateTime,
+        occurrenceDate: schedule.startTime, // 해당 일정의 시작 시간을 발생일로 설정
       );
 
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('일정이 성공적으로 미뤄졌습니다')),
-          );
-          _loadData(); // 데이터 새로고침
-        }
-      } else {
-        throw Exception('일정 미루기 실패: ${response.statusCode} - ${response.body}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일정이 성공적으로 미뤄졌습니다')),
+        );
+        _loadData(); // 데이터 새로고침
       }
     } catch (e) {
       if (mounted) {
@@ -1562,8 +1602,8 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 반복 일정 삭제 다이얼로그
-  void _showRecurrenceDeleteDialog(Schedule schedule) {
+  // 일정 옵션 다이얼로그 (삭제, 미루기 포함)
+  void _showScheduleOptionsDialog(Schedule schedule) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1572,7 +1612,7 @@ class _HomePageState extends State<HomePage> {
           borderRadius: BorderRadius.circular(12),
         ),
         title: const Text(
-          '반복 일정 삭제',
+          '일정 옵션',
           style: TextStyle(
             fontFamily: 'Pretendard',
             fontSize: 18,
@@ -1584,23 +1624,11 @@ class _HomePageState extends State<HomePage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                '이 반복 일정을 어떻게 삭제하시겠습니까?',
-                style: TextStyle(
-                  fontFamily: 'Pretendard',
-                  fontSize: 16,
-                  color: Colors.black,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            // 현재 일정만 삭제 버튼
+            // 미루기 버튼
             InkWell(
               onTap: () {
                 Navigator.pop(context);
-                _deleteCurrentOccurrence(schedule);
+                _showPostponeDialog(schedule);
               },
               child: Container(
                 width: double.infinity,
@@ -1611,7 +1639,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 child: const Text(
-                  '현재 일정만 삭제',
+                  '미루기',
                   style: TextStyle(
                     fontFamily: 'Pretendard',
                     fontSize: 16,
@@ -1622,17 +1650,17 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            // 전체 반복 일정 삭제 버튼
+            // 삭제 버튼
             InkWell(
               onTap: () {
                 Navigator.pop(context);
-                _deleteSchedule(schedule);
+                _showDeleteConfirmationDialog(schedule);
               },
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: const Text(
-                  '전체 반복 일정 삭제',
+                  '삭제',
                   style: TextStyle(
                     fontFamily: 'Pretendard',
                     fontSize: 16,
@@ -1661,229 +1689,5 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-  }
-
-  // 현재 일정만 삭제 (반복 일정의 특정 인스턴스만 제외)
-  Future<void> _deleteCurrentOccurrence(Schedule schedule) async {
-    try {
-      final scheduleId = schedule.scheduleId;
-      if (scheduleId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('일정 ID가 없습니다')),
-        );
-        return;
-      }
-      
-      // 선택된 날짜 정보가 필요
-      final selectedDateOnly = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-      );
-      
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-      
-      final idToken = await user.getIdToken(true);
-      
-      // 현재 인스턴스만 삭제하는 API 호출
-      final String url = '${ApiConfig.schedulesEndpoint}/$scheduleId/exclude-occurrence';
-      print('현재 인스턴스 제외 요청 URL: $url');
-      
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: json.encode({
-          'excludeDate': selectedDateOnly.toIso8601String(),
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('현재 일정만 삭제되었습니다')),
-          );
-          _loadData(); // 데이터 새로고침
-        }
-      } else {
-        // 특정 인스턴스 제외 API가 구현되지 않았거나 오류가 발생한 경우
-        // 프론트엔드에서 임시 대응: 기존 반복 설정에서 해당 요일만 제외
-        if (response.statusCode == 404) {
-          await _handleOccurrenceExclusionLocally(schedule, selectedDateOnly);
-        } else {
-          throw Exception('일정 인스턴스 삭제 실패: ${response.statusCode} - ${response.body}');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('일정 인스턴스 삭제 실패: $e')),
-        );
-      }
-    }
-  }
-  
-  // 백엔드 API가 구현되지 않은 경우 프론트엔드에서 임시 구현
-  Future<void> _handleOccurrenceExclusionLocally(Schedule schedule, DateTime excludeDate) async {
-    try {
-      // 해당 인스턴스의 요일 찾기
-      final dayOfWeek = excludeDate.weekday.toString(); // 1(월요일) ~ 7(일요일)
-      
-      if (schedule.recurrenceDays == null || !schedule.recurrenceDays!.contains(dayOfWeek)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('일정 데이터 오류: 해당 요일이 반복 설정에 없습니다')),
-        );
-        return;
-      }
-      
-      // 임시로 제외된 날짜를 저장할 새로운 필드 사용 (백엔드에 구현 필요)
-      // 실제 구현에서는 DB에 excluded_dates 같은 필드를 추가해야 함
-      final updatedSchedule = schedule.copyWith(
-        // 여기서는 임시로 처리...
-      );
-      
-      // 이 예시에서는 사용자에게 백엔드 구현이 필요하다는 메시지만 표시
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('현재 인스턴스 삭제 기능이 아직 백엔드에 완전히 구현되지 않았습니다. 백엔드 구현이 필요합니다.'),
-          duration: Duration(seconds: 5),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('일정 인스턴스 처리 오류: $e')),
-        );
-      }
-    }
-  }
-
-  // 일정 삭제 메서드 추가
-  Future<void> _deleteSchedule(Schedule schedule) async {
-    final bool isRecurring = schedule.recurrenceDays != null && 
-                            schedule.recurrenceDays!.isNotEmpty &&
-                            schedule.recurrenceDays != "0,0,0,0,0,0,0";
-    
-    // 삭제 다이얼로그 표시
-    final bool? result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isRecurring ? '반복 일정 삭제' : '일정 삭제'),
-        content: Text(isRecurring ? 
-          '이 반복 일정을 삭제하시겠습니까?' : 
-          '이 일정을 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    
-    if (result != true) {
-      // 취소됨
-      return;
-    }
-    
-    try {
-      final scheduleId = schedule.scheduleId;
-      if (scheduleId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('일정 ID가 없습니다')),
-        );
-        return;
-      }
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-      
-      final idToken = await user.getIdToken(true);
-      
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.schedulesEndpoint}/$scheduleId'),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-        },
-      );
-      
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('일정이 삭제되었습니다')),
-        );
-        _loadData(); // 데이터 새로고침
-      } else {
-        throw Exception('일정 삭제 실패: ${response.statusCode}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('일정 삭제 실패: $e')),
-        );
-      }
-    }
-  }
-
-  // 현재 리마인더 날짜만 제외 (반복 일정에서 특정 날짜만 제외)
-  Future<void> _excludeCurrentReminderDate(Reminder reminder) async {
-    try {
-      final reminderId = reminder.reminderId;
-      if (reminderId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('리마인더 ID가 없습니다')),
-        );
-        return;
-      }
-      
-      // 선택된 날짜 정보
-      final selectedDateOnly = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-      );
-      
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-      
-      final idToken = await user.getIdToken(true);
-      
-      // 현재 인스턴스만 삭제하는 API 호출
-      final String url = '${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence';
-      
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: json.encode({
-          'excludeDate': selectedDateOnly.toIso8601String(),
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('현재 리마인더만 삭제되었습니다')),
-          );
-          _loadData();
-        }
-      } else {
-        throw Exception('리마인더 인스턴스 삭제 실패: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('리마인더 인스턴스 삭제 실패: $e')),
-        );
-      }
-    }
   }
 }

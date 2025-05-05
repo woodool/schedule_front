@@ -1,11 +1,11 @@
-package org.example.service;
+package org.example.domain.reminder;
 
 import lombok.RequiredArgsConstructor;
-import org.example.dto.ReminderDTO;
-import org.example.entity.Reminder;
-import org.example.entity.User;
-import org.example.repository.ReminderRepository;
-import org.example.repository.UserRepository;
+import org.example.domain.reminder.dto.ReminderDTO;
+import org.example.domain.reminder.Reminder;
+import org.example.domain.user.User;
+import org.example.domain.reminder.ReminderRepository;
+import org.example.domain.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -162,12 +162,17 @@ public class ReminderService {
         boolean isValidDay = false;
         String recurrenceDays = reminder.getRecurrenceDays();
         
+        // 요일 인덱스 처리(Java는 월=1, 일=7이므로 배열 인덱스로 변환)
+        int dayIndex = dayOfWeek - 1; // 배열 인덱스는 0부터 시작하므로 1을 빼줌
+        
         // "1,0,1,0,1,0,0" 형식
         if (recurrenceDays.split(",").length == 7) {
             String[] days = recurrenceDays.split(",");
-            if (days[dayOfWeek - 1].equals("1")) {
+            // 요일 인덱스 변환 후 체크
+            if (days[dayIndex].equals("1")) {
                 isValidDay = true;
             }
+            System.out.println("요일 검증: " + excludeDateOnly + "는 " + dayOfWeek + "요일이며, 인덱스 " + dayIndex + "의 값은 " + days[dayIndex]);
         } 
         // "1,3,5" 형식
         else if (recurrenceDays.contains(",")) {

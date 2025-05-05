@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/reminder.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/config/api_config.dart';
+import '../models/Recurrence_option.Dart';
 
 class ReminderService {
   // 중앙화된 API 설정 사용
@@ -160,6 +161,69 @@ class ReminderService {
       return;
     } else {
       throw Exception('리마인더 삭제 실패: ${response.statusCode} - ${response.body}');
+    }
+  }
+  
+  // 추가된 메소드: 리마인더 상태 토글
+  Future<void> toggleReminder(String reminderId, bool isChecked) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+
+    final idToken = await user.getIdToken(true);
+
+    final response = await http.put(
+      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/toggle'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $idToken',
+      },
+      body: json.encode({'isChecked': isChecked}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('리마인더 상태 변경 실패: ${response.statusCode} - ${response.body}');
+    }
+  }
+  
+  // 추가된 메소드: 반복 리마인더 삭제
+  Future<void> deleteRecurringReminder(String reminderId, RecurrenceDeleteMode mode) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+
+    final idToken = await user.getIdToken(true);
+    final modeString = mode.toString().split('.').last; // enum 값을 문자열로 변환
+
+    final response = await http.delete(
+      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId?option=$modeString'),
+      headers: {
+        'Authorization': 'Bearer $idToken',
+      },
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('반복 리마인더 삭제 실패: ${response.statusCode} - ${response.body}');
+    }
+  }
+  
+  // 추가된 메소드: 특정 날짜의 리마인더 제외
+  Future<void> excludeReminderOccurrence(String reminderId, DateTime date) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+
+    final idToken = await user.getIdToken(true);
+    final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    final response = await http.put(
+      Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/exclude'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $idToken',
+      },
+      body: json.encode({'date': dateString}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('리마인더 날짜 제외 실패: ${response.statusCode} - ${response.body}');
     }
   }
 }

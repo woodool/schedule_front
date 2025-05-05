@@ -1,4 +1,4 @@
-package org.example.dto;
+package org.example.domain.schedule.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

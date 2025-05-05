@@ -1,7 +1,8 @@
-package org.example.entity;
+package org.example.domain.reminder;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.domain.user.User;
 
 import java.time.LocalDateTime;
 
@@ -30,6 +31,7 @@ public class Reminder {
     private LocalDateTime reminderTime;  // 실제 알림 시간
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;     // 활성화 여부 (기본 true)
 
     @Column(name = "checked_date", nullable = true)

@@ -108,35 +108,102 @@ class _EditReminderPageState extends State<EditReminderPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('반복 리마인더 수정'),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            '반복 리마인더 수정',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+            ),
+            textAlign: TextAlign.center,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('이 반복 리마인더를 어떻게 수정하시겠습니까?'),
-              const SizedBox(height: 20),
-              ListTile(
-                title: const Text('이 리마인더만 수정'),
-                subtitle: const Text('현재 선택한 날짜의 리마인더만 수정합니다'),
-                onTap: () {
-                  Navigator.of(context).pop(RecurrenceEditMode.single);
-                },
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Text(
+                  '이 반복 리마인더를 어떻게 수정하시겠습니까?',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontSize: 16,
+                    color: Colors.black,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              ListTile(
-                title: const Text('모든 반복 리마인더 삭제'),
-                subtitle: const Text('이 반복 리마인더의 모든 일정을 삭제합니다'),
+              
+              // 이 리마인더만 수정 버튼
+              InkWell(
                 onTap: () {
-                  Navigator.of(context).pop(RecurrenceEditMode.allSeries);
+                  Navigator.pop(context, RecurrenceEditMode.single);
                 },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '이 리마인더만 수정',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.black,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              
+              // 전체 시리즈 수정 버튼
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context, RecurrenceEditMode.allSeries);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    border: Border.all(color: Colors.blue.shade200),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '전체 시리즈 수정',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.blue,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('취소'),
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                '취소',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black,
+                ),
+              ),
             ),
           ],
         );
@@ -153,7 +220,24 @@ class _EditReminderPageState extends State<EditReminderPage> {
     }
 
     try {
-      // 수정 시 항상 전체 반복 리마인더에 적용
+      // 반복 리마인더인지 확인
+      final isRecurring = widget.reminder.recurrenceDays.isNotEmpty && 
+                        widget.reminder.recurrenceDays != "0,0,0,0,0,0,0" &&
+                        widget.reminder.recurrenceDays.contains("1");
+      
+      RecurrenceEditMode editMode = RecurrenceEditMode.allSeries; // 기본값은 전체 시리즈 수정
+      
+      // 반복 리마인더인 경우 옵션 다이얼로그 표시
+      if (isRecurring) {
+        final selectedMode = await _showRecurrenceEditDialog();
+        if (selectedMode == null) {
+          // 다이얼로그에서 취소했을 경우
+          return;
+        }
+        editMode = selectedMode;
+      }
+
+      // 수정할 리마인더 객체 생성
       final reminder = Reminder(
         reminderId: widget.reminder.reminderId,
         reminder_title: _titleController.text,
@@ -166,8 +250,14 @@ class _EditReminderPageState extends State<EditReminderPage> {
         recurrenceEndDate: _recurrenceEndDate,
       );
 
-      // 모든 반복 리마인더에 변경사항 적용
-      await _reminderService.updateReminder(reminder);
+      // 선택된 옵션에 따라 다른 API 호출
+      if (editMode == RecurrenceEditMode.single) {
+        // 이 리마인더만 수정 - 단일 발생 수정 API 호출
+        await _updateSingleOccurrence(reminder);
+      } else {
+        // 전체 시리즈 수정 - 기존 API 호출
+        await _reminderService.updateReminder(reminder);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -185,6 +275,53 @@ class _EditReminderPageState extends State<EditReminderPage> {
     }
   }
   
+  // 단일 발생 리마인더 수정
+  Future<void> _updateSingleOccurrence(Reminder reminder) async {
+    final reminderId = reminder.reminderId;
+    if (reminderId == null) {
+      throw Exception('리마인더 ID가 없습니다');
+    }
+    
+    // 오늘 날짜를 ISO 8601 형식으로 변환
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    
+    try {
+      // 단일 발생 수정 API 호출
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
+      
+      final idToken = await user.getIdToken(true);
+      
+      // 반복 리마인더에서 특정 날짜 제외 후 단일 리마인더로 추가
+      // 1. 기존 반복 일정에서 오늘 날짜 제외
+      await http.post(
+        Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/exclude-occurrence'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: json.encode({
+          'excludeDate': todayDate.toIso8601String(),
+        }),
+      );
+      
+      // 2. 단일 리마인더로 추가
+      await _reminderService.saveReminder(
+        Reminder(
+          reminder_title: reminder.reminder_title,
+          recurrenceDays: "0,0,0,0,0,0,0", // 반복 없음
+          reminderMinutesBefore: reminder.reminderMinutesBefore,
+          date: todayDate.toIso8601String(),
+        )
+      );
+      
+    } catch (e) {
+      print('단일 리마인더 수정 오류: $e');
+      rethrow;
+    }
+  }
+
   // 리마인더 삭제 다이얼로그 표시
   Future<bool> _showDeleteConfirmDialog() async {
     // 반복 리마인더인지 확인
@@ -199,26 +336,87 @@ class _EditReminderPageState extends State<EditReminderPage> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text('리마인더 삭제'),
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            title: const Text(
+              '반복 리마인더 삭제',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+              textAlign: TextAlign.center,
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('삭제 범위를 선택해주세요'),
-                const SizedBox(height: 20),
-                ListTile(
-                  title: const Text('이 리마인더만 삭제'),
-                  subtitle: const Text('현재 선택한 날짜의 리마인더만 삭제합니다'),
-                  onTap: () {
-                    Navigator.of(context).pop(RecurrenceEditMode.single);
-                  },
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    '이 반복 리마인더를 어떻게 삭제하시겠습니까?',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 16,
+                      color: Colors.black,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                ListTile(
-                  title: const Text('모든 반복 리마인더 삭제'),
-                  subtitle: const Text('이 반복 리마인더의 모든 일정을 삭제합니다'),
+                
+                // 리마인더만 삭제 버튼
+                InkWell(
                   onTap: () {
-                    Navigator.of(context).pop(RecurrenceEditMode.allSeries);
+                    Navigator.pop(context, RecurrenceEditMode.single);
                   },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      '이 리마인더만 삭제',
+                      style: TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.black,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                
+                // 전체 시리즈 삭제 버튼
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(context, RecurrenceEditMode.allSeries);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      border: Border.all(color: Colors.red.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      '전체 시리즈 삭제',
+                      style: TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.red,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -227,7 +425,15 @@ class _EditReminderPageState extends State<EditReminderPage> {
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: const Text('취소'),
+                child: const Text(
+                  '취소',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black,
+                  ),
+                ),
               ),
             ],
           );
@@ -441,17 +647,6 @@ class _EditReminderPageState extends State<EditReminderPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: () async {
-              final deleted = await _showDeleteConfirmDialog();
-              if (deleted && mounted) {
-                _returnDeleteResult();
-              }
-            },
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

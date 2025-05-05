@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import '../../../../core/config/api_config.dart';
 
 class LoginPage extends StatefulWidget {
@@ -69,16 +70,21 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       // ID 토큰 가져오기
-        final idToken = await userCredential.user?.getIdToken();
+      final idToken = await userCredential.user?.getIdToken();
 
-      // 백엔드 API 호출
-          final response = await http.post(
-            Uri.parse(ApiConfig.authLoginEndpoint),
-            headers: {'Content-Type': 'application/json'},
+      // 백엔드 API 호출 (타임아웃 10초 추가)
+      final response = await http.post(
+        Uri.parse(ApiConfig.authLoginEndpoint),
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'firebaseToken': idToken,
         }),
-          );
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('서버 연결 시간이 초과되었습니다.');
+        },
+      );
           
       if (response.statusCode == 200) {
         // 로그인 성공
@@ -119,10 +125,22 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       );
+    } on TimeoutException catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('서버 연결 시간이 초과되었습니다. 네트워크 상태를 확인해주세요.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('로그인 중 오류가 발생했습니다. 다시 시도해주세요'),
+          content: Text('로그인 중 오류가 발생했습니다. 다시 시도해주세요: ${e.toString()}'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),

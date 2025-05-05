@@ -1,7 +1,7 @@
-package org.example.repository;
+package org.example.domain.reminder;
 
-import org.example.entity.Reminder;
-import org.example.entity.User;
+import org.example.domain.reminder.Reminder;
+import org.example.domain.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;

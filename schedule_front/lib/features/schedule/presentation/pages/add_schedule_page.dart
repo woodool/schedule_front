@@ -61,6 +61,12 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
     }
 
     try {
+      // recurrenceDays 설정
+      String? recurrenceDays;
+      if (_selectedDays.contains(true)) {
+        recurrenceDays = _selectedDays.map((selected) => selected ? '1' : '0').join(',');
+      }
+      
       final schedule = Schedule(
         title: _titleController.text,
         description: _contentController.text,
@@ -70,7 +76,7 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
         priority: _selectedPriority?.value,
         displayOnCalendar: _calendarDisplayType == CalendarDisplayType.show,
         reminderMinutesBefore: _customMinutes,
-        recurrenceDays: _recurrenceDays,
+        recurrenceDays: recurrenceDays,
         recurrenceStartDate: _recurrenceStartDate,
         recurrenceEndDate: _recurrenceEndDate,
       );

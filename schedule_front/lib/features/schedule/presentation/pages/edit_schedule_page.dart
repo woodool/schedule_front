@@ -10,6 +10,7 @@ import '../widgets/calendar_display_selector.dart';
 import '../widgets/action_buttons.dart';
 import '../../domain/models/priority.dart';
 import '../../domain/models/schedule.dart';
+import '../../domain/models/Recurrence_option.Dart';
 import '../../domain/services/schedule_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -130,7 +131,7 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
     if (_recurrenceDays != null && _recurrenceDays!.isNotEmpty) {
       // "1,0,1,0,1,0,0" 형식 (0/1로 표시된 요일 패턴)
       if (_recurrenceDays!.split(',').length == 7) {
-      final days = _recurrenceDays!.split(',');
+        final days = _recurrenceDays!.split(',');
         for (int i = 0; i < 7 && i < days.length; i++) {
           _selectedDays[i] = days[i] == '1';
         }
@@ -229,7 +230,7 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
       );
       return;
     }
-
+    
     try {
       // 기본값으로 전체 시리즈 수정 모드 설정
       RecurrenceEditMode editMode = RecurrenceEditMode.allSeries;
@@ -255,7 +256,7 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
 
       print('일정 수정 요청 - 원본 ID: ${widget.schedule.scheduleId}, 편집 모드: $editMode');
       final schedule = Schedule(
-        scheduleId: widget.schedule.scheduleId,
+        id: widget.schedule.scheduleId,
         title: _titleController.text,
         description: _contentController.text,
         startTime: _startDate,
@@ -290,7 +291,18 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
           return;
         case RecurrenceEditMode.allSeries:
           // 전체 시리즈 수정
-      await _scheduleService.updateSchedule(schedule);
+          // 일정 객체에 옵션 필드 추가
+          final Map<String, dynamic> scheduleJson = schedule.toJson();
+          scheduleJson['option'] = 'ALL'; // 백엔드 DTO의 option 필드에 명시적 매핑
+          
+          // 로깅
+          print('전체 시리즈 수정 - option 필드 추가: $scheduleJson');
+          
+          await _scheduleService.updateSchedule(
+            schedule,
+            option: 'ALL',
+            preserveExcludedDates: true, // excludedDates 보존
+          );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -316,62 +328,189 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
   
   // 이 일정만 수정하는 메서드
   Future<void> _updateSingleOccurrence(Schedule schedule) async {
-    // 1. 원본 반복 일정에서 현재 날짜 제외
-    final currentDate = DateTime(
-      _startDate.year,
-      _startDate.month,
-      _startDate.day,
-    );
-    
-    // 1.1 현재 날짜 제외 API 호출
-    final excludeDate = currentDate.toIso8601String();
-    final scheduleId = widget.schedule.scheduleId;
-    
-    if (scheduleId == null) {
-      throw Exception('일정 ID가 없습니다');
+    try {
+      final scheduleId = widget.schedule.scheduleId;
+      
+      if (scheduleId == null) {
+        throw Exception('일정 ID가 없습니다');
+      }
+      
+      // 현재 날짜 구하기
+      final currentDate = DateTime(
+        _startDate.year,
+        _startDate.month,
+        _startDate.day,
+        schedule.startTime.hour,
+        schedule.startTime.minute,
+      );
+      
+      print('단일 일정 수정 - 선택된 날짜: $currentDate');
+      
+      // 원본 일정 정보 가져오기 (시작일 확인 및 제외 로직을 위해)
+      final originalSchedule = await _scheduleService.getScheduleById(scheduleId);
+      
+      // 반복 일정인지 확인
+      final bool isRecurringEvent = originalSchedule.recurrenceDays != null && 
+                                    originalSchedule.recurrenceDays!.isNotEmpty && 
+                                    originalSchedule.recurrenceDays != "0,0,0,0,0,0,0";
+      
+      // 시작일 수정인지 확인
+      bool isModifyingStartDate = false;
+      if (isRecurringEvent && originalSchedule.recurrenceStartDate != null) {
+        // 날짜 비교 (시간 무시)
+        final modifyingDay = DateTime(currentDate.year, currentDate.month, currentDate.day);
+        final startDay = DateTime(
+          originalSchedule.recurrenceStartDate!.year, 
+          originalSchedule.recurrenceStartDate!.month, 
+          originalSchedule.recurrenceStartDate!.day
+        );
+        
+        isModifyingStartDate = modifyingDay.isAtSameMomentAs(startDay);
+        print('시작일 수정 여부: $isModifyingStartDate');
+      }
+      
+      // 시작일 수정인 경우: 기존 일정의 시작일을 다음 반복일로 변경
+      if (isRecurringEvent && isModifyingStartDate) {
+        print('시작일 수정 로직 실행: 기존 일정의 시작일을 다음 반복일로 변경');
+        
+        try {
+          // 1. 다음 발생 일자 계산
+          final List<int> activeDays = [];
+          if (originalSchedule.recurrenceDays != null) {
+            final dayList = originalSchedule.recurrenceDays!.split(',');
+            for (int i = 0; i < dayList.length && i < 7; i++) {
+              if (dayList[i] == '1') {
+                activeDays.add(i);
+              }
+            }
+          }
+          
+          // 제외된 날짜 목록
+          List<String> excludedDates = [];
+          if (originalSchedule.excludedDates != null && originalSchedule.excludedDates!.isNotEmpty) {
+            excludedDates = originalSchedule.excludedDates!
+                .split(',')
+                .where((d) => d.isNotEmpty)
+                .toList();
+          }
+          
+          // 다음 발생일 계산
+          DateTime? nextOccurrence;
+          if (activeDays.isNotEmpty) {
+            // 다음 날부터 최대 30일까지 검색
+            for (int i = 1; i <= 30; i++) {
+              final candidate = currentDate.add(Duration(days: i));
+              // 요일 확인 (0:월, 1:화, ..., 6:일)
+              final weekday = candidate.weekday % 7; // 0:일, 1:월, ..., 6:토 => 요일 변환 필요
+              final adjustedWeekday = weekday == 0 ? 6 : weekday - 1; // 월:0, 화:1, ..., 일:6
+              
+              if (activeDays.contains(adjustedWeekday)) {
+                // 이미 제외된 날짜인지 확인
+                final candidateDateStr = candidate.toIso8601String().split('T')[0];
+                if (!excludedDates.contains(candidateDateStr)) {
+                  nextOccurrence = candidate;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (nextOccurrence == null) {
+            throw Exception('다음 반복 일자를 찾을 수 없습니다');
+          }
+          
+          print('새로운 시작일: $nextOccurrence');
+          
+          // 2. 원본 일정 업데이트 (시작일 변경)
+          final updateScheduleRequest = originalSchedule.copyWith(
+            recurrenceStartDate: nextOccurrence,
+            // startTime도 함께 변경 - 시간은 유지
+            startTime: DateTime(
+              nextOccurrence.year,
+              nextOccurrence.month,
+              nextOccurrence.day,
+              originalSchedule.startTime.hour,
+              originalSchedule.startTime.minute,
+            ),
+          );
+          
+          // 3. 백엔드에 일정 업데이트 요청 (ALL 옵션)
+          await _scheduleService.updateSchedule(
+            updateScheduleRequest,
+            option: 'ALL',
+          );
+          
+          print('기존 반복 일정 시작일 변경 완료');
+        } catch (e) {
+          print('시작일 변경 중 오류: $e');
+          throw Exception('반복 일정 시작일 변경 실패: $e');
+        }
+      } 
+      // 시작일이 아닌 경우: 기존 일정에 해당 날짜 제외 처리
+      else if (isRecurringEvent) {
+        // 날짜 문자열 형식 (yyyy-MM-dd)
+        final dateStr = currentDate.toIso8601String().split('T')[0];
+        
+        // 제외된 날짜 목록
+        List<String> excludedDates = [];
+        if (originalSchedule.excludedDates != null && originalSchedule.excludedDates!.isNotEmpty) {
+          excludedDates = originalSchedule.excludedDates!
+              .split(',')
+              .where((d) => d.isNotEmpty)
+              .toList();
+        }
+        
+        // 이미 제외 목록에 없는 경우에만 추가
+        if (!excludedDates.contains(dateStr)) {
+          excludedDates.add(dateStr);
+          
+          // 원본 일정 업데이트
+          final updateExcludeRequest = originalSchedule.copyWith(
+            excludedDates: excludedDates.join(','),
+          );
+          
+          print('기존 일정에 해당 날짜 제외 처리: $dateStr');
+          
+          // 백엔드에 일정 업데이트 요청 (ALL 옵션)
+          await _scheduleService.updateSchedule(
+            updateExcludeRequest,
+            option: 'ALL',
+          );
+          
+          print('기존 일정에 날짜 제외 처리 완료');
+        }
+      }
+      
+      // 새 일정 생성 (단일 일정)
+      final newSchedule = Schedule(
+        title: schedule.title,
+        description: schedule.description,
+        startTime: currentDate,
+        endTime: DateTime(
+          currentDate.year,
+          currentDate.month,
+          currentDate.day,
+          schedule.endTime.hour,
+          schedule.endTime.minute,
+        ),
+        categoryId: schedule.categoryId,
+        priority: schedule.priority,
+        displayOnCalendar: schedule.displayOnCalendar,
+        reminderMinutesBefore: schedule.reminderMinutesBefore,
+        // 중요: 반복 설정을 제거하고 단일 일정으로 변경
+        recurrenceDays: "0,0,0,0,0,0,0",
+        recurrenceStartDate: null,
+        recurrenceEndDate: null,
+      );
+      
+      // 새 일정 생성 요청
+      await _scheduleService.createSchedule(newSchedule);
+      
+      print('단일 일정 수정 완료 (기존 일정 변경 후 새 일정 생성)');
+    } catch (e) {
+      print('단일 일정 수정 오류: $e');
+      rethrow;
     }
-    
-    // 백엔드 API 호출: 반복 일정에서 현재 날짜 제외
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-    
-    final idToken = await user.getIdToken(true);
-    
-    // 반복 일정에서 특정 날짜 제외하는 API 호출
-    final excludeResponse = await http.post(
-      Uri.parse('${ApiConfig.schedulesEndpoint}/$scheduleId/exclude-occurrence'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $idToken',
-      },
-      body: json.encode({
-        'excludeDate': excludeDate,
-      }),
-    );
-    
-    if (excludeResponse.statusCode != 200) {
-      throw Exception('반복 일정에서 날짜 제외 실패: ${excludeResponse.statusCode}');
-    }
-    
-    // 2. 현재 날짜에 대한 새로운 일회성 일정 생성
-    // 반복 설정 제거 (일회성 일정으로 변경)
-    final singleSchedule = Schedule(
-      title: schedule.title,
-      description: schedule.description,
-      startTime: schedule.startTime,
-      endTime: schedule.endTime,
-      categoryId: schedule.categoryId,
-      priority: schedule.priority,
-      displayOnCalendar: schedule.displayOnCalendar,
-      reminderMinutesBefore: schedule.reminderMinutesBefore,
-      // 반복 정보 제거
-      recurrenceDays: "0,0,0,0,0,0,0",
-      recurrenceStartDate: null,
-      recurrenceEndDate: null,
-    );
-    
-    // 새 일정 생성 API 호출
-    await _scheduleService.createSchedule(singleSchedule);
   }
   
   // 이 일정 및 향후 모든 일정 수정하는 메서드
@@ -383,67 +522,26 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
         throw Exception('일정 ID가 없습니다');
       }
       
-      // 현재 날짜(선택한 일정 날짜) 구하기
+      // 현재 날짜(선택한 일정 날짜) 구하기 - 시간까지 포함하여 정확한 발생일 지정
       final currentDate = DateTime(
         _startDate.year,
         _startDate.month,
         _startDate.day,
+        schedule.startTime.hour,
+        schedule.startTime.minute,
       );
       
-      print('향후 일정 수정 - 선택된 날짜: ${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}');
+      print('향후 일정 수정 - 선택된 날짜: $currentDate');
       
-      // 1. 원본 반복 일정 불러오기
-      final originalSchedule = widget.schedule;
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-      
-      final idToken = await user.getIdToken(true);
-      
-      // 2. 서버가 recurrenceEndDate와 excludedDates 필드를 모두 무시하므로
-      // 원본 일정을 삭제하고 2개의 새 일정을 생성하는 방식으로 변경
-      
-      // 2.1 원본 일정의 정보 가져오기
-      final originalStartDate = originalSchedule.recurrenceStartDate ?? originalSchedule.startTime;
-      final originalEndDate = originalSchedule.recurrenceEndDate ?? DateTime(2100, 12, 31);
-      print('원본 일정 정보 - 시작일: $originalStartDate, 종료일: $originalEndDate');
-      
-      // 2.2 원본 일정 삭제
-      print('원본 일정 삭제 - ID: ${originalSchedule.scheduleId}');
-      await _scheduleService.deleteSchedule(originalSchedule.scheduleId!);
-      print('원본 일정 삭제 완료');
-      
-      // 2.3 이전 기간 일정 생성 (원래 시작일 ~ 선택한 날짜 전날)
-      // 현재 날짜 전날 계산
-      final dayBeforeCurrentDate = currentDate.subtract(const Duration(days: 1));
-      
-      // 선택한 날짜가 원래 시작일과 같거나 이후인 경우에만 이전 기간 일정 생성
-      if (originalStartDate.isBefore(currentDate)) {
-        final previousSchedule = originalSchedule.copyWith(
-          scheduleId: null, // 새 ID 생성을 위해 null로 설정
-          recurrenceStartDate: originalStartDate,
-          recurrenceEndDate: dayBeforeCurrentDate,
-        );
-        
-        print('이전 기간 일정 생성 - 시작일: ${previousSchedule.recurrenceStartDate}, 종료일: ${previousSchedule.recurrenceEndDate}');
-        
-        await _scheduleService.createSchedule(previousSchedule);
-        print('이전 기간 일정 생성 완료');
-      } else {
-        print('이전 기간 일정이 없어 생성하지 않음');
-      }
-      
-      // 2.4 새 일정 생성 (현재 날짜부터 원래 종료일까지)
-      final newSchedule = schedule.copyWith(
-        scheduleId: null, // 새 ID 생성을 위해 null로 설정
-        recurrenceStartDate: currentDate,
-        recurrenceEndDate: originalEndDate,
+      // 서비스를 통해 이후 일정 모두 수정 (preserveExcludedDates 옵션 추가)
+      await _scheduleService.updateSchedule(
+        schedule,
+        option: 'FUTURE',
+        occurrenceDate: currentDate,
+        preserveExcludedDates: true, // excludedDates 보존
       );
       
-      print('새 일정 생성 - 시작일: ${newSchedule.recurrenceStartDate}, 종료일: ${newSchedule.recurrenceEndDate}');
-      
-      // 새 일정 생성 요청
-      await _scheduleService.createSchedule(newSchedule);
-      print('새 일정 생성 완료');
+      print('향후 일정 수정 완료');
       
       // 성공 메시지 표시
       ScaffoldMessenger.of(context).showSnackBar(
@@ -455,7 +553,6 @@ class _EditSchedulePageState extends State<EditSchedulePage> {
       
       // 캘린더 페이지로 이동하고 결과 true 반환 (캘린더에서 새로고침하도록)
       Navigator.pop(context, true);
-      
     } catch (e) {
       print('향후 일정 수정 오류: $e');
       // 오류 메시지 표시

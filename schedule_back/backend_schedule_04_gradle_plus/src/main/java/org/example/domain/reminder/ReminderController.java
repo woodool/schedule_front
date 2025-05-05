@@ -1,8 +1,8 @@
-package org.example.controller;
+package org.example.domain.reminder;
 
 import lombok.RequiredArgsConstructor;
-import org.example.dto.ReminderDTO;
-import org.example.service.ReminderService;
+import org.example.domain.reminder.dto.ReminderDTO;
+import org.example.domain.reminder.ReminderService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;

@@ -1,10 +1,10 @@
-package org.example.dto;
+package org.example.domain.reminder.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.example.entity.Reminder;
+import org.example.domain.reminder.Reminder;
 
 import java.time.LocalDateTime;
 

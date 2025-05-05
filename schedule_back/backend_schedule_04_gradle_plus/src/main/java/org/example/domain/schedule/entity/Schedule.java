@@ -1,8 +1,8 @@
-package org.example.entity;
+package org.example.domain.schedule.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
+import org.example.domain.user.User;
 import java.time.LocalDateTime;
 
 @Entity
@@ -21,13 +21,10 @@ public class Schedule {
     @Column(name = "firebase_uid")
     private String firebaseUid;
 
-    @Column(name = "title", nullable = false)
+    @Column(nullable = false)
     private String title;
 
-    @Column(name = "description", nullable = true)
     private String description;
-
-    @Column(name = "category_id", nullable = true)
     private Integer categoryId;
 
     @Column(name = "start_time", nullable = false)
@@ -36,31 +33,30 @@ public class Schedule {
     @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
 
-    @Column(name = "recurrence_days", nullable = true)
+    @Column(name = "recurrence_days")
     private String recurrenceDays;
 
+    @Column(name = "recurrence_start_date")
+    private LocalDateTime recurrenceStartDate;
+
+    @Column(name = "recurrence_end_date")
+    private LocalDateTime recurrenceEndDate;
+
+    @Column(name = "excluded_dates", columnDefinition = "TEXT")
+    private String excludedDates; // 쉼표로 구분된 ISO 날짜 문자열 "2023-10-01,2023-10-08"
+
     @Builder.Default
-    @Column(name = "priority", nullable = true)
     private Integer priority = 4;
 
     @Builder.Default
     @Column(name = "display_on_calendar", nullable = false)
     private Boolean displayOnCalendar = true;
 
-    @Column(name = "reminder_minutes_before", nullable = true)
+    @Column(name = "reminder_minutes_before")
     private Integer reminderMinutesBefore;
 
-    @Column(name = "reminder_time", nullable = true)
+    @Column(name = "reminder_time")
     private LocalDateTime reminderTime;
-
-    @Column(name = "recurrence_start_date", nullable = true)
-    private LocalDateTime recurrenceStartDate;
-
-    @Column(name = "recurrence_end_date", nullable = true)
-    private LocalDateTime recurrenceEndDate;
-
-    @Column(name = "excluded_dates", nullable = true, columnDefinition = "TEXT")
-    private String excludedDates; // 쉼표로 구분된 ISO 날짜 문자열 "2023-10-01,2023-10-08"
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")

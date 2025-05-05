@@ -1,13 +1,13 @@
-package org.example.service;
+package org.example.domain.user;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import lombok.RequiredArgsConstructor;
-import org.example.dto.UserRegisterDTO;
-import org.example.dto.UserLoginDTO;
-import org.example.entity.User;
-import org.example.repository.UserRepository;
+import org.example.domain.user.dto.UserRegisterDTO;
+import org.example.domain.user.dto.UserLoginDTO;
+import org.example.domain.user.User;
+import org.example.domain.user.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
