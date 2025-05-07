@@ -16,13 +16,18 @@ class ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 화면 너비 가져오기
+    final screenWidth = MediaQuery.of(context).size.width;
+    // 버튼 너비 계산 - 여백과 사이 간격 고려
+    final buttonWidth = (screenWidth - 100) / 2; // 양쪽 여백과 중간 간격을 고려한 너비
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         GestureDetector(
           onTap: onCancelPressed,
           child: Container(
-            width: 160,
+            width: buttonWidth,
             height: 40,
             alignment: Alignment.center,
             child: Text(
@@ -37,11 +42,11 @@ class ActionButtons extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 35),
+        const SizedBox(width: 20), // 중간 간격 줄임
         GestureDetector(
           onTap: onSubmitPressed,
           child: Container(
-            width: 160,
+            width: buttonWidth,
             height: 40,
             alignment: Alignment.center,
             child: Text(

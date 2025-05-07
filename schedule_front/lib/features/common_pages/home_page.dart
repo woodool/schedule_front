@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:schedule/features/schedule/presentation/widgets/add_button.dart';
+import 'package:schedule/features/common_widgets/add_button.dart';
 import 'package:schedule/features/schedule/presentation/widgets/recurrence_delete_dialog.dart';
-import '../../domain/models/schedule.dart';
-import '../../domain/models/reminder.dart';
-import '../../domain/models/priority.dart';
-import '../../domain/models/Recurrence_option.Dart';
-import '../../domain/services/schedule_service.dart';
-import '../../domain/services/reminder_service.dart';
+import '../schedule/domain/models/schedule.dart';
+import '../schedule/domain/models/reminder.dart';
+import '../schedule/domain/models/priority.dart';
+import '../schedule/domain/models/Recurrence_option.Dart';
+import '../schedule/domain/services/schedule_service.dart';
+import '../schedule/domain/services/reminder_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../../../../core/config/api_config.dart';
-import 'edit_reminder_page.dart';
-import 'edit_schedule_page.dart';
+import '../../core/config/api_config.dart';
+import '../schedule/presentation/pages/edit_reminder_page.dart';
+import '../schedule/presentation/pages/edit_schedule_page.dart';
+import '../schedule/presentation/pages/schedule_from_image.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -1067,8 +1070,20 @@ class _HomePageState extends State<HomePage> {
           AddButtonItem(
             label: '사진으로 일정 추가',
             iconPath: 'assets/images/image.png',
-            onPressed: () {
-              // TODO: 사진으로 일정 추가 기능 구현
+            onPressed: () async {
+              final ImagePicker picker = ImagePicker();
+              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+              
+              if (image != null) {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(
+                    builder: (context) => ScheduleFromSchedulePage(
+                      initialImage: File(image.path),
+                    )
+                  )
+                );
+              }
             },
           ),
           AddButtonItem(
@@ -1092,6 +1107,9 @@ class _HomePageState extends State<HomePage> {
             },
           ),
         ],
+        onItemSelected: () {
+          // ... existing code ...
+        },
       ),
     );
   }

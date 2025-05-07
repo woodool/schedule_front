@@ -5,6 +5,15 @@ import '../../../../core/config/api_config.dart';
 import '../models/schedule.dart';
 import '../models/Recurrence_option.Dart';
 
+// TimeoutException 정의
+class TimeoutException implements Exception {
+  final String message;
+  TimeoutException(this.message);
+  
+  @override
+  String toString() => message;
+}
+
 class ScheduleService {
   /// 현재 로그인된 사용자의 Firebase ID 토큰을 가져옵니다.
   Future<String> _getIdToken() async {
@@ -801,27 +810,94 @@ class ScheduleService {
 
   /// 일정 검색 기능 (서버 API 사용, 실패 시 로컬 검색)
   Future<List<Schedule>> searchSchedules(String query) async {
-    final token = await _getIdToken();
-    final uri = Uri.parse('${ApiConfig.schedulesEndpoint}/search?query=$query');
-    final response = await http.get(
-      uri,
-      headers: { 'Authorization': 'Bearer $token' },
-    );
-    if (response.statusCode == 200) {
-      final List<dynamic> list = json.decode(response.body);
-      return list.map((e) => Schedule.fromJson(e)).toList();
+    // 빈 검색어인 경우 빈 결과 반환
+    if (query.isEmpty) {
+      return [];
     }
-    // 서버 검색 API 실패 시 로컬 검색으로 대체
-    return _localSearchSchedules(query);
+    
+    // 검색어가 짧은 경우 로컬 검색 우선 수행 (응답성 향상)
+    if (query.length < 3) {
+      return _localSearchSchedules(query);
+    }
+    
+    try {
+      final token = await _getIdToken();
+      final encodedQuery = Uri.encodeComponent(query);
+      final uri = Uri.parse('${ApiConfig.schedulesEndpoint}/search?query=$encodedQuery');
+      
+      // 타임아웃 설정으로 응답성 향상
+      final response = await http.get(
+        uri,
+        headers: { 'Authorization': 'Bearer $token' },
+      ).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw TimeoutException('검색 요청 시간 초과'),
+      );
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> list = json.decode(response.body);
+        return list.map((e) => Schedule.fromJson(e)).toList();
+      }
+      
+      // 서버 검색 실패 시 로컬 검색으로 대체
+      return _localSearchSchedules(query);
+    } catch (e) {
+      print('서버 검색 실패, 로컬 검색으로 대체: $e');
+      // 오류 발생 시 로컬 검색으로 대체
+      return _localSearchSchedules(query);
+    }
   }
 
   Future<List<Schedule>> _localSearchSchedules(String query) async {
+    if (query.isEmpty) {
+      return [];
+    }
+    
     final all = await getSchedules();
     final lower = query.toLowerCase();
-    return all.where((s) {
-      return s.title.toLowerCase().contains(lower)
-          || (s.description?.toLowerCase().contains(lower) ?? false);
+    
+    // 최적화된 검색 알고리즘
+    final result = all.where((s) {
+      // 제목에 검색어가 포함된 경우
+      if (s.title.toLowerCase().contains(lower)) {
+        return true;
+      }
+      
+      // 설명에 검색어가 포함된 경우
+      if (s.description != null && s.description!.toLowerCase().contains(lower)) {
+        return true;
+      }
+      
+      // 날짜 문자열에 검색어가 포함된 경우
+      final startDateStr = s.startTime.toString().toLowerCase();
+      if (startDateStr.contains(lower)) {
+        return true;
+      }
+      
+      return false;
     }).toList();
+    
+    // 검색 순위 정렬: 제목 일치 > 설명 일치 > 날짜 일치
+    result.sort((a, b) {
+      // 1. 제목에 검색어가 있는지 여부
+      final aTitleContains = a.title.toLowerCase().contains(lower);
+      final bTitleContains = b.title.toLowerCase().contains(lower);
+      
+      if (aTitleContains && !bTitleContains) return -1;
+      if (!aTitleContains && bTitleContains) return 1;
+      
+      // 2. 제목 시작 위치 비교
+      if (aTitleContains && bTitleContains) {
+        final aIndex = a.title.toLowerCase().indexOf(lower);
+        final bIndex = b.title.toLowerCase().indexOf(lower);
+        if (aIndex != bIndex) return aIndex - bIndex;
+      }
+      
+      // 3. 날짜 최신순 정렬
+      return b.startTime.compareTo(a.startTime);
+    });
+    
+    return result;
   }
 
   /// 제외된 날짜(excludedDates) 보존 기능 테스트

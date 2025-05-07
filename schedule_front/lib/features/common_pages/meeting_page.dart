@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:schedule/features/schedule/presentation/widgets/add_button.dart';
+import 'package:schedule/features/common_widgets/add_button.dart';
+import 'package:schedule/features/meeting/presentation/widgets/matching_meeting_create_dialog.dart';
+import 'package:schedule/features/meeting/presentation/widgets/club_room_create_dialog.dart';
+import 'package:schedule/features/schedule/domain/services/schedule_service.dart';
 
 class MeetingPage extends StatefulWidget {
   const MeetingPage({super.key});
@@ -10,6 +13,55 @@ class MeetingPage extends StatefulWidget {
 
 class _MeetingPageState extends State<MeetingPage> {
   bool _isScheduleSelected = true;
+  final ScheduleService _scheduleService = ScheduleService();
+
+  // 일정 잡기 다이얼로그를 표시하는 메서드
+  void _showMatchingMeetingDialog() async {
+    final schedule = await MatchingMeetingCreateDialog.show(context);
+    
+    if (schedule != null) {
+      try {
+        // 스케줄 서비스를 통해 일정 생성
+        await _scheduleService.createSchedule(schedule);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('일정이 성공적으로 등록되었습니다.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('일정 저장 실패: $e')),
+          );
+        }
+      }
+    }
+  }
+  
+  // 모임 만들기 다이얼로그를 표시하는 메서드
+  void _showClubRoomDialog() async {
+    final schedule = await ClubRoomCreateDialog.show(context);
+    
+    if (schedule != null) {
+      try {
+        // 스케줄 서비스를 통해 모임 일정 생성
+        await _scheduleService.createSchedule(schedule);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('모임이 성공적으로 등록되었습니다.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('모임 저장 실패: $e')),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -151,17 +203,13 @@ class _MeetingPageState extends State<MeetingPage> {
           AddButtonItem(
             label: '일정 잡기',
             iconPath: 'assets/images/bookmark.png',
-            onPressed: () {
-              // TODO: 일정 잡기 기능 구현
-            },
+            onPressed: _showMatchingMeetingDialog,
             description: '등록된 일정을 기반으로 최적의 날을 잡아드립니다',
           ),
           AddButtonItem(
             label: '모임 만들기',
             iconPath: 'assets/images/makemeeting.png',
-            onPressed: () {
-              // TODO: 모임 만들기 기능 구현
-            },
+            onPressed: _showClubRoomDialog,
             description: '모임을 만들어 쉽게 공지와 일정을 공유해 보세요',
           ),
           AddButtonItem(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/title_input.dart';
-import '../widgets/repeat_setting_box.dart';
-import '../widgets/notification_setting_box.dart';
+import '../../../common_widgets/repeat_setting_box.dart';
+import '../../../common_widgets/notification_setting_box.dart';
 import '../widgets/action_buttons.dart';
 import '../../domain/models/reminder.dart';
 import '../../domain/services/reminder_service.dart';

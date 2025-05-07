@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import '../../domain/models/priority.dart';
+import '../schedule/domain/models/priority.dart';
 
 class PrioritySettingBox extends StatelessWidget {
   final Priority? selectedPriority;

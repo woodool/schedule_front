@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:schedule/features/schedule/presentation/widgets/add_button.dart';
+import 'package:schedule/features/common_widgets/add_button.dart';
 import 'package:schedule/features/schedule/domain/models/priority.dart';
 import 'package:schedule/features/schedule/domain/models/schedule.dart';
 import 'package:schedule/features/schedule/domain/models/Recurrence_option.Dart';
@@ -11,10 +11,18 @@ import 'package:schedule/features/schedule/presentation/widgets/recurrence_delet
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../../../../core/config/api_config.dart';
+import '../../core/config/api_config.dart';
+import '../schedule/presentation/pages/schedule_from_image.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class CalendarPage extends StatefulWidget {
-  const CalendarPage({super.key});
+  final DateTime? initialDate;
+  
+  const CalendarPage({
+    super.key, 
+    this.initialDate,
+  });
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
@@ -34,8 +42,8 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   void initState() {
     super.initState();
-    _focusedDay = DateTime.now();
-    _selectedDay = DateTime.now();
+    _focusedDay = widget.initialDate ?? DateTime.now();
+    _selectedDay = widget.initialDate ?? DateTime.now();
     _calendarFormat = CalendarFormat.week;
     // 초기 로드
     _loadSchedules(forceRefresh: true);
@@ -301,14 +309,22 @@ class _CalendarPageState extends State<CalendarPage> {
               width: 40,
               child: IconButton(
                 icon: Image.asset('assets/images/calendarsearch.png', width: 24, height: 24),
-                onPressed: () {
+                onPressed: () async {
                   // 검색 화면으로 이동
-                  Navigator.push(
+                  final selectedDate = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const ScheduleSearchPage(),
                     ),
                   );
+                  
+                  // 검색 화면에서 날짜 정보를 받아오면 해당 날짜로 이동
+                  if (selectedDate != null && selectedDate is DateTime) {
+                    setState(() {
+                      _selectedDay = selectedDate;
+                      _focusedDay = selectedDate;
+                    });
+                  }
                 },
               ),
             ),
@@ -598,8 +614,20 @@ class _CalendarPageState extends State<CalendarPage> {
           AddButtonItem(
             label: '사진으로 일정 추가',
             iconPath: 'assets/images/image.png',
-            onPressed: () {
-              // 사진으로 일정 추가 기능
+            onPressed: () async {
+              final ImagePicker picker = ImagePicker();
+              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+              
+              if (image != null) {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(
+                    builder: (context) => ScheduleFromSchedulePage(
+                      initialImage: File(image.path),
+                    )
+                  )
+                );
+              }
             },
           ),
           AddButtonItem(
@@ -622,6 +650,9 @@ class _CalendarPageState extends State<CalendarPage> {
             },
           ),
         ],
+        onItemSelected: () {
+          // ... existing code ...
+        },
       ),
     );
   }

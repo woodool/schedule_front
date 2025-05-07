@@ -3,8 +3,7 @@ class ApiConfig {
   // static const String baseUrl = 'http://192.168.219.101:8080/api';
   // static const String baseUrl = 'http://172.16.7.130:8080/api';
   // static const String baseUrl = 'http://192.168.219.101:8080/api';
-  // static const String baseUrl = 'http://172.30.1.87:8080/api';
-  static const String baseUrl = 'http://172.30.1.89:8080/api';
+  static const String baseUrl = 'http://172.30.1.32:8080/api';
 
   // 엔드포인트
   static String get userEndpoint => '$baseUrl/users/me';
