@@ -7,13 +7,17 @@ import org.example.domain.schedule.exception.*;
 import org.example.domain.schedule.mapper.ScheduleMapper;
 import org.example.domain.schedule.repository.ScheduleRepository;
 import org.example.domain.schedule.util.RecurrenceCalculator;
+import org.example.domain.schedule.util.ScheduleUtils;
 import org.example.domain.user.User;
 import org.example.domain.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -264,7 +268,7 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
     }
     }
 
-    //산진 일정 추가
+    //사진 일정 추가
     @Transactional
     public List<ScheduleResponseDTO> photoAddSchedule(PhotoListRequestDTO requestDTO, String firebaseUid) {
         User user = userRepo.findByFirebaseUid(firebaseUid)
@@ -280,7 +284,6 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
 
             Schedule schedule = Schedule.builder()
                     .title(dto.getTitle())
-                    .description(dto.getDescription())
                     .startTime(dto.getStartTime())
                     .endTime(dto.getEndTime())
                     .recurrenceDays(dto.getRecurrenceDays())
@@ -299,5 +302,87 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
         return savedSchedules.stream()
                 .map(ScheduleResponseDTO::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    public List<AutoScheduleResponseDTO> generateSuggestions(AutoScheduleRequestDTO request, String firebaseUid) {
+        List<Schedule> existing = repo.findAllByFirebaseUid(firebaseUid);
+        List<AutoScheduleResponseDTO> suggestions = new ArrayList<>();
+
+        LocalDate today = LocalDate.now();
+        LocalDate targetDate = today;
+
+        // 1. 빈 시간대 탐색
+        List<LocalTime[]> emptySlots = ScheduleUtils.findEmptySlots(existing, targetDate);
+        for (LocalTime[] slot : emptySlots) {
+            if (!slot[0].isBefore(request.getStartTime()) && !slot[1].isAfter(request.getEndTime())) {
+                suggestions.add(new AutoScheduleResponseDTO(
+                        request.getTitle(),
+                        targetDate.atTime(slot[0]),
+                        targetDate.atTime(slot[1]),
+                        request.getDescription(),
+                        request.getPriority(),
+                        null
+                ));
+            }
+        }
+
+        // 2. 겹치는 일정 중 우선순위 낮은 것들 추출
+        LocalDateTime reqStart = targetDate.atTime(request.getStartTime());
+        LocalDateTime reqEnd = targetDate.atTime(request.getEndTime());
+
+        for (Schedule schedule : existing) {
+            if (isOverlap(schedule.getStartTime(), schedule.getEndTime(), reqStart, reqEnd)) {
+                if (request.getPriority() < schedule.getPriority()) {
+                    suggestions.add(new AutoScheduleResponseDTO(
+                            request.getTitle(),
+                            reqStart,
+                            reqEnd,
+                            request.getDescription(),
+                            request.getPriority(),
+                            schedule.getId()
+                    ));
+                }
+            }
+        }
+
+        suggestions.sort(Comparator.comparing(AutoScheduleResponseDTO::getPriority));
+        return suggestions;
+    }
+
+    public void saveConfirmedSchedule(AutoScheduleResponseDTO selected, String firebaseUid) {
+        if (selected.getReplacedScheduleId() != null) {
+            // 겹친 모든 일정들을 찾아서 다음 주로 미룸
+            LocalDateTime newStart = selected.getStartTime();
+            LocalDateTime newEnd = selected.getEndTime();
+
+            List<Schedule> overlapping = repo.findAllByFirebaseUid(firebaseUid).stream()
+                    .filter(s -> isOverlap(s.getStartTime(), s.getEndTime(), newStart, newEnd))
+                    .filter(s -> s.getPriority() > selected.getPriority())
+                    .collect(Collectors.toList());
+
+            for (Schedule s : overlapping) {
+                s.setStartTime(s.getStartTime().plusWeeks(1));
+                s.setEndTime(s.getEndTime().plusWeeks(1));
+                if (s.getReminderTime() != null) {
+                    s.setReminderTime(s.getReminderTime().plusWeeks(1));
+                }
+                repo.save(s);
+            }
+        }
+
+        Schedule schedule = Schedule.builder()
+                .title(selected.getTitle())
+                .description(selected.getDescription())
+                .startTime(selected.getStartTime())
+                .endTime(selected.getEndTime())
+                .priority(selected.getPriority())
+                .firebaseUid(firebaseUid)
+                .build();
+
+        repo.save(schedule);
+    }
+
+    private boolean isOverlap(LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2) {
+        return !(end1.isBefore(start2) || start1.isAfter(end2));
     }
 }

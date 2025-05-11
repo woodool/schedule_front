@@ -130,4 +130,21 @@ public class ScheduleController {
         String firebaseUid = authentication.getName();
         return ResponseEntity.ok(service.photoAddSchedule(requestDTO, firebaseUid));
     }
+
+    @PostMapping("/suggestions")
+    public ResponseEntity<List<AutoScheduleResponseDTO>> getAutoScheduleSuggestions(
+            @RequestBody AutoScheduleRequestDTO request,
+            Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        return ResponseEntity.ok(service.generateSuggestions(request, firebaseUid));
+    }
+
+    @PostMapping("/confirm")
+    public ResponseEntity<String> confirmSchedule(
+            @RequestBody AutoScheduleResponseDTO selected,
+            Authentication authentication) {
+        String firebaseUid = authentication.getName();
+        service.saveConfirmedSchedule(selected, firebaseUid);
+        return ResponseEntity.ok("일정 저장 완료");
+    }
 }

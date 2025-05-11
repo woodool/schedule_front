@@ -9,6 +9,7 @@ import java.util.List;
 
 public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
     List<Schedule> findByUser(User user);
+    List<Schedule> findAllByFirebaseUid(String firebaseUid);
 
     @Query("SELECT s FROM Schedule s WHERE s.user = :user AND " +
            "(LOWER(s.title) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(s.description) LIKE LOWER(CONCAT('%', :q, '%')))" )
