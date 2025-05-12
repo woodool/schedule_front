@@ -2,6 +2,8 @@ package org.example.domain.schedule.util;
 
 import org.example.domain.schedule.entity.Schedule;
 import org.example.domain.schedule.dto.RecurrenceOption;
+
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -115,4 +117,55 @@ public class RecurrenceCalculator {
     }
 
     // TODO: 더 복잡한 로직 필요 시 구현
+
+    /** String 요일 패턴 또는 번호(1,3,5 등) → List<DayOfWeek> */
+    public static List<DayOfWeek> parseRecurrenceDays(String rec) {
+        if (rec == null || rec.isEmpty()) return Collections.emptyList();
+        String[] parts = rec.split(",");
+        return Arrays.stream(parts)
+                .map(String::trim)
+                .map(RecurrenceCalculator::parseDay)
+                .collect(Collectors.toList());
+    }
+
+    /** 개별 문자열 → DayOfWeek (숫자 또는 영문명) */
+    public static DayOfWeek parseDay(String token) {
+        try {
+            int val = Integer.parseInt(token);
+            return DayOfWeek.of(val);
+        } catch (NumberFormatException ex) {
+            return DayOfWeek.valueOf(token.toUpperCase());
+        }
+    }
+
+    /** 현재 요일 → 다음 반복 요일 계산 */
+    public static DayOfWeek findNextDay(DayOfWeek current, List<DayOfWeek> days) {
+        List<DayOfWeek> sorted = new ArrayList<>(days);
+        sorted.sort(Comparator.naturalOrder());
+        for (DayOfWeek d : sorted) {
+            if (d.getValue() > current.getValue()) return d;
+        }
+        return sorted.get(0);
+    }
+
+    /** 두 요일 간 일수 차이 계산 */
+    public static int daysToNext(DayOfWeek current, DayOfWeek next) {
+        int diff = next.getValue() - current.getValue();
+        return diff > 0 ? diff : diff + 7;
+    }
+
+    /** 일정 이동: 주 단위로 이동 */
+    public static void shiftScheduleByWeeks(Schedule s, int weeks) {
+        s.setStartTime(s.getStartTime().plusWeeks(weeks));
+        s.setEndTime(s.getEndTime().plusWeeks(weeks));
+        if (s.getReminderTime() != null) {
+            s.setReminderTime(s.getReminderTime().plusWeeks(weeks));
+        }
+    }
+
+    /** 일정 겹침 여부 판단 */
+    public static boolean isOverlap(LocalDateTime s1, LocalDateTime e1,
+                                    LocalDateTime s2, LocalDateTime e2) {
+        return !(e1.isBefore(s2) || s1.isAfter(e2));
+    }
 }

@@ -10,15 +10,17 @@ import org.example.domain.schedule.util.RecurrenceCalculator;
 import org.example.domain.schedule.util.ScheduleUtils;
 import org.example.domain.user.User;
 import org.example.domain.user.UserRepository;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -309,43 +311,47 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
         List<AutoScheduleResponseDTO> suggestions = new ArrayList<>();
 
         LocalDate today = LocalDate.now();
-        LocalDate targetDate = today;
+        // 최대 2주(14일) 이내 검색
+        for (int dayOffset = 0; dayOffset < 14; dayOffset++) {
+            LocalDate targetDate = today.plusDays(dayOffset);
+            LocalDateTime reqStart = targetDate.atTime(request.getStartTime());
+            LocalDateTime reqEnd   = targetDate.atTime(request.getEndTime());
 
-        // 1. 빈 시간대 탐색
-        List<LocalTime[]> emptySlots = ScheduleUtils.findEmptySlots(existing, targetDate);
-        for (LocalTime[] slot : emptySlots) {
-            if (!slot[0].isBefore(request.getStartTime()) && !slot[1].isAfter(request.getEndTime())) {
-                suggestions.add(new AutoScheduleResponseDTO(
-                        request.getTitle(),
-                        targetDate.atTime(slot[0]),
-                        targetDate.atTime(slot[1]),
-                        request.getDescription(),
-                        request.getPriority(),
-                        null
-                ));
+            // 1. 빈 시간대 탐색
+            List<LocalTime[]> emptySlots = ScheduleUtils.findEmptySlots(existing, targetDate);
+            for (LocalTime[] slot : emptySlots) {
+                if (!slot[0].isBefore(request.getStartTime()) && !slot[1].isAfter(request.getEndTime())) {
+                    suggestions.add(new AutoScheduleResponseDTO(
+                            request.getTitle(),
+                            targetDate.atTime(slot[0]),
+                            targetDate.atTime(slot[1]),
+                            request.getDescription(),
+                            request.getPriority(),
+                            null
+                    ));
+                }
             }
-        }
 
-        // 2. 겹치는 일정 중 우선순위 낮은 것들 추출
-        LocalDateTime reqStart = targetDate.atTime(request.getStartTime());
-        LocalDateTime reqEnd = targetDate.atTime(request.getEndTime());
-
-        for (Schedule schedule : existing) {
-            if (isOverlap(schedule.getStartTime(), schedule.getEndTime(), reqStart, reqEnd)) {
-                if (request.getPriority() < schedule.getPriority()) {
+            // 2. 겹치는 일정 중 우선순위 낮은 것들 추출
+            for (Schedule s : existing) {
+                if (RecurrenceCalculator.isOverlap(s.getStartTime(), s.getEndTime(), reqStart, reqEnd)
+                        && request.getPriority() < s.getPriority()) {
                     suggestions.add(new AutoScheduleResponseDTO(
                             request.getTitle(),
                             reqStart,
                             reqEnd,
                             request.getDescription(),
                             request.getPriority(),
-                            schedule.getId()
+                            s.getId()
                     ));
                 }
             }
         }
 
-        suggestions.sort(Comparator.comparing(AutoScheduleResponseDTO::getPriority));
+        // 우선순위 높은 순, 날짜가 빠른 순으로 정렬
+        suggestions.sort(Comparator
+                .comparing(AutoScheduleResponseDTO::getPriority)
+                .thenComparing(AutoScheduleResponseDTO::getStartTime));
         return suggestions;
     }
 
@@ -356,7 +362,7 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
             LocalDateTime newEnd = selected.getEndTime();
 
             List<Schedule> overlapping = repo.findAllByFirebaseUid(firebaseUid).stream()
-                    .filter(s -> isOverlap(s.getStartTime(), s.getEndTime(), newStart, newEnd))
+                    .filter(s -> RecurrenceCalculator.isOverlap(s.getStartTime(), s.getEndTime(), newStart, newEnd))
                     .filter(s -> s.getPriority() > selected.getPriority())
                     .collect(Collectors.toList());
 
@@ -382,7 +388,68 @@ private LocalDateTime shiftByMode(LocalDateTime original, PostponeRequestDTO dto
         repo.save(schedule);
     }
 
-    private boolean isOverlap(LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2) {
-        return !(end1.isBefore(start2) || start1.isAfter(end2));
+    /** Firebase 알림 트리거 시 해당 일정만 다음회차로 이동 **/
+    @Transactional
+    public void handleRecurringTrigger(Long scheduleId, String firebaseUid) {
+        Schedule s = repo.findById(scheduleId)
+                .orElseThrow(() -> new NoSuchElementException("일정이 없습니다: " + scheduleId));
+        if (!s.getFirebaseUid().equals(firebaseUid)) {
+            throw new SecurityException("권한 없음");
+        }
+        List<DayOfWeek> days = RecurrenceCalculator.parseRecurrenceDays(s.getRecurrenceDays());
+        if (days.isEmpty()) {
+            return; // 반복 설정 없으면 건너뜀
+        }
+        updateToNextRecurringDate(s, days);
+        // 알림 기능이 넣어진 뒤 알림 수정 코드도 넣을 예정. 아직 완성 아님
+    }
+
+    /** 새로운 일정 저장 후 전체 반복 일정 갱신 **/
+    @Transactional
+    public void refreshRecurringSchedulesForUser(String firebaseUid) {
+        List<Schedule> schedules = repo.findAllByFirebaseUid(firebaseUid).stream()
+                .filter(s -> s.getRecurrenceDays() != null && !s.getRecurrenceDays().isEmpty())
+                .collect(Collectors.toList());
+        for (Schedule s : schedules) {
+            if (s.getStartTime().isBefore(LocalDateTime.now())) {
+                List<DayOfWeek> days = RecurrenceCalculator.parseRecurrenceDays(s.getRecurrenceDays());
+                if (!days.isEmpty()) {
+                    updateToNextRecurringDate(s, days);
+                }
+            }
+        }
+        // 알림 기능이 넣어진 뒤 알림 수정 코드도 넣을 예정. 아직 완성 아님
+    }
+
+    /** 매일 자정, 전체 반복 일정 갱신 **/
+    @Scheduled(cron = "0 0 0 * * ?")
+    @Transactional
+    public void scheduledRefreshAllRecurring() {
+        List<Schedule> all = repo.findAll();
+        for (Schedule s : all) {
+            if (s.getRecurrenceDays() != null && !s.getRecurrenceDays().isEmpty()
+                    && s.getStartTime().isBefore(LocalDateTime.now())) {
+                List<DayOfWeek> days = RecurrenceCalculator.parseRecurrenceDays(s.getRecurrenceDays());
+                if (!days.isEmpty()) {
+                    updateToNextRecurringDate(s, days);
+                }
+            }
+        }
+        // 알림 기능이 넣어진 뒤 알림 수정 코드도 넣을 예정. 아직 완성 아님
+    }
+
+    /** 단일 스케줄을 다음 반복 요일로 이동 **/
+    private void updateToNextRecurringDate(Schedule schedule, List<DayOfWeek> days) {
+        LocalDateTime currentStart = schedule.getStartTime();
+        DayOfWeek today = currentStart.getDayOfWeek();
+        DayOfWeek nextDay = RecurrenceCalculator.findNextDay(today, days);
+        int daysToAdd = RecurrenceCalculator.daysToNext(today, nextDay);
+        schedule.setStartTime(currentStart.plusDays(daysToAdd));
+        schedule.setEndTime(schedule.getEndTime().plusDays(daysToAdd));
+        if (schedule.getReminderTime() != null) {
+            schedule.setReminderTime(schedule.getReminderTime().plusDays(daysToAdd));
+        }
+        repo.save(schedule);
+        // 알림 기능이 넣어진 뒤 알림 수정 코드도 넣을 예정. 아직 완성 아님
     }
 }
