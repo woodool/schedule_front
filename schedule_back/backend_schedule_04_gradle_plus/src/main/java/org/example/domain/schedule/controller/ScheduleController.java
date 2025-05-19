@@ -131,20 +131,30 @@ public class ScheduleController {
         return ResponseEntity.ok(service.photoAddSchedule(requestDTO, firebaseUid));
     }
 
+    /**
+     * 빈 시간대 추천
+     * @return 추천 리스트 또는 "일정이 없습니다"
+     */
     @PostMapping("/suggestions")
-    public ResponseEntity<List<AutoScheduleResponseDTO>> getAutoScheduleSuggestions(
+    public ResponseEntity<?> getSuggestions(
             @RequestBody AutoScheduleRequestDTO request,
             Authentication authentication) {
-        String firebaseUid = authentication.getName();
-        return ResponseEntity.ok(service.generateSuggestions(request, firebaseUid));
+        List<AutoScheduleResponseDTO> suggestions =
+                service.generateSuggestions(request, authentication.getName());
+        if (suggestions.isEmpty()) {
+            return ResponseEntity.ok("일정이 없습니다");
+        }
+        return ResponseEntity.ok(suggestions);
     }
 
+    /**
+     * 사용자가 선택한 추천 일정 저장
+     */
     @PostMapping("/confirm")
     public ResponseEntity<String> confirmSchedule(
             @RequestBody AutoScheduleResponseDTO selected,
             Authentication authentication) {
-        String firebaseUid = authentication.getName();
-        service.saveConfirmedSchedule(selected, firebaseUid);
+        service.saveConfirmedSchedule(selected, authentication.getName());
         return ResponseEntity.ok("일정 저장 완료");
     }
 }

@@ -16,7 +16,6 @@ public class PhotoScheduleDTO {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private String recurrenceDays;
-    private LocalDateTime reminderTime;
     private LocalDateTime recurrenceStartDate;
     private LocalDateTime recurrenceEndDate;
 }
