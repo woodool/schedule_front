@@ -3,8 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:intl/intl.dart';
 import 'dart:io' show Platform;
 import 'core/theme/app_theme.dart';
+import 'core/router/app_router.dart';
 import 'features/common_pages/home_page.dart';
 import 'features/schedule/presentation/pages/add_reminder_page.dart';
 import 'features/schedule/presentation/pages/add_schedule_page.dart';
@@ -22,6 +24,9 @@ import 'features/schedule/domain/models/schedule.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 기본 로케일을 한국어로 설정
+  Intl.defaultLocale = 'ko_KR';
+  
   if (kIsWeb) {
     await Firebase.initializeApp();
   } else if (Platform.isAndroid) {
@@ -37,6 +42,9 @@ void main() async {
   } else {
     await Firebase.initializeApp();
   }
+
+  // 앱 시작 시 자동으로 로그아웃
+  await FirebaseAuth.instance.signOut();
   
   runApp(const MyApp());
 }
@@ -46,7 +54,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'TimeHomie',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
@@ -58,41 +66,33 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('ko', 'KR'),
       ],
-      initialRoute: '/login',
-      routes: {
-        '/login': (context) => const LoginPage(),
-        '/signup': (context) => const SignupPage(),
-        '/home': (context) => const MainScreen(),
-        '/add_reminder': (context) => const AddReminderPage(),
-        '/add_schedule': (context) => const AddSchedulePage(),
-        '/edit_reminder': (context) {
-          final reminder = ModalRoute.of(context)!.settings.arguments as Reminder;
-          return EditReminderPage(reminder: reminder);
-        },
-        '/edit_schedule': (context) {
-          final schedule = ModalRoute.of(context)!.settings.arguments as Schedule;
-          return EditSchedulePage(schedule: schedule);
-        },
-      },
+      routerConfig: goRouter,
     );
   }
 }
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final int initialIndex;
+  
+  const MainScreen({
+    super.key,
+    this.initialIndex = 0,
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
+    // 전달받은 초기 인덱스 사용
+    _currentIndex = widget.initialIndex;
     _pages = [
     const HomePage(),
     const CalendarPage(),

@@ -58,6 +58,10 @@ public class Schedule {
     @Column(name = "reminder_time")
     private LocalDateTime reminderTime;
 
+    @Column(name = "schedule_type")
+    @Builder.Default
+    private String scheduleType = "PERSONAL"; // "PERSONAL" 또는 "MEETING"
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;

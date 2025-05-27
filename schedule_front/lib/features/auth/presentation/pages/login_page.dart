@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import '../../../../core/config/api_config.dart';
+import 'package:go_router/go_router.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -88,7 +89,9 @@ class _LoginPageState extends State<LoginPage> {
           
       if (response.statusCode == 200) {
         // 로그인 성공
-        Navigator.pushReplacementNamed(context, '/home');
+        if (mounted) {
+          context.go('/');
+        }
       } else {
         throw Exception('로그인 실패: ${response.body}');
       }
@@ -403,7 +406,7 @@ class _LoginPageState extends State<LoginPage> {
                                       ),
                                     ),
                                     TextButton(
-                                      onPressed: () => Navigator.pushNamed(context, '/signup'),
+                                      onPressed: () => context.go('/signup'),
                                       style: TextButton.styleFrom(
                                         padding: EdgeInsets.zero,
                                         minimumSize: Size.zero,

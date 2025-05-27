@@ -17,6 +17,7 @@ import '../schedule/presentation/pages/edit_schedule_page.dart';
 import '../schedule/presentation/pages/schedule_from_image.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -29,6 +30,7 @@ class _HomePageState extends State<HomePage> {
   final ScheduleService _scheduleService = ScheduleService();
   final ReminderService _reminderService = ReminderService();
   List<Schedule> _schedules = [];
+  List<Schedule> _groupSchedules = [];
   List<Reminder> _reminders = [];
   bool _isLoading = true;
   String? _error;
@@ -70,8 +72,25 @@ class _HomePageState extends State<HomePage> {
               // 생성 날짜 기반으로 일차 계산
               if (userData['createdAt'] != null) {
                 try {
+                  print('원본 createdAt: ${userData['createdAt']}');
+                  
                   // String 형태의 생성일자를 DateTime으로 변환
-                  final createdDate = DateTime.parse(userData['createdAt']);
+                  DateTime createdDate;
+                  
+                  try {
+                    // 정확한 포맷 명시하여 파싱 시도
+                    final dateStr = userData['createdAt'].toString();
+                    
+                    // 마이크로초 제거 (초 단위까지만 사용)
+                    final simplifiedDateStr = dateStr.split('.')[0];
+                    createdDate = DateTime.parse(simplifiedDateStr);
+                    print('정제된 날짜 문자열: $simplifiedDateStr → $createdDate');
+                  } catch (parseError) {
+                    print('기본 파싱 실패, 대체 방법 시도: $parseError');
+                    // 기본 파싱 시도
+                    createdDate = DateTime.parse(userData['createdAt'].toString());
+                  }
+                  
                   // 날짜만 추출하여 비교 (시간 무시)
                   final createdDateOnly = DateTime(
                     createdDate.year,
@@ -134,12 +153,14 @@ class _HomePageState extends State<HomePage> {
     try {
       final schedules = await _scheduleService.getSchedules();
       final reminders = await _reminderService.getReminders();
+      final groupSchedules = await _loadGroupSchedules();
 
       if (!mounted) return;
 
       setState(() {
         _schedules = schedules;
         _reminders = reminders;
+        _groupSchedules = groupSchedules;
         _isLoading = false;
         
         // 체크박스 상태 초기화 - 개선된 방식
@@ -179,6 +200,17 @@ class _HomePageState extends State<HomePage> {
           duration: const Duration(seconds: 3),
         ),
       );
+    }
+  }
+
+  Future<List<Schedule>> _loadGroupSchedules() async {
+    try {
+      // ScheduleService를 사용하여 그룹 일정을 가져옴
+      final schedules = await _scheduleService.getGroupSchedules();
+      return schedules;
+    } catch (e) {
+      print('모임일정 로드 실패: $e');
+      return [];
     }
   }
 
@@ -416,6 +448,11 @@ class _HomePageState extends State<HomePage> {
     print('\n[${_selectedDate.toString().split(' ')[0]} 일정 필터링]');
     
     for (var schedule in _schedules) {
+      // 모임 일정은 제외
+      if (schedule.scheduleType == 'MEETING') {
+        continue;
+      }
+      
       // 1. 일반 일정: 시작 날짜가 선택한 날짜와 일치하는 경우
       final scheduleDate = DateTime(
         schedule.startTime.year,
@@ -605,6 +642,135 @@ class _HomePageState extends State<HomePage> {
     print('표시할 총 일정 수: ${filteredSchedules.length}개\n');
     
     return filteredSchedules;
+  }
+
+  // 선택된 날짜에 해당하는 모임일정만 필터링
+  List<Schedule> _getGroupSchedulesForSelectedDate() {
+    final selectedDateOnly = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
+    
+    // 필터링된 모임일정 목록
+    List<Schedule> filteredGroupSchedules = [];
+    
+    for (var schedule in _groupSchedules) {
+      // 시작 날짜가 선택한 날짜와 일치하는 경우
+      final scheduleDate = DateTime(
+        schedule.startTime.year,
+        schedule.startTime.month,
+        schedule.startTime.day,
+      );
+      
+      if (scheduleDate.isAtSameMomentAs(selectedDateOnly)) {
+        filteredGroupSchedules.add(schedule);
+      }
+      
+      // 반복 일정 처리 - 개인 일정과 동일한 로직 적용
+      if (schedule.recurrenceDays != null && schedule.recurrenceDays!.isNotEmpty) {
+        // 반복 요일 패턴 파싱
+        final List<String> recurrenceDaysList = schedule.recurrenceDays!.split(',');
+        
+        // 반복 일정이 아닌 경우 건너뛰기 (모든 값이 0)
+        if (!schedule.recurrenceDays!.contains("1")) {
+          continue;
+        }
+        
+        // 반복 기간 체크
+        if (schedule.recurrenceStartDate != null) {
+          final startDateOnly = DateTime(
+            schedule.recurrenceStartDate!.year,
+            schedule.recurrenceStartDate!.month,
+            schedule.recurrenceStartDate!.day,
+          );
+          
+          if (selectedDateOnly.isBefore(startDateOnly)) {
+            continue;
+          }
+        }
+        
+        // 종료일 체크
+        bool isWithinRecurrencePeriod = true;
+        if (schedule.recurrenceEndDate != null) {
+          final endDateOnly = DateTime(
+            schedule.recurrenceEndDate!.year,
+            schedule.recurrenceEndDate!.month,
+            schedule.recurrenceEndDate!.day,
+          );
+          
+          if (selectedDateOnly.isAfter(endDateOnly)) {
+            isWithinRecurrencePeriod = false;
+          }
+        }
+        
+        if (!isWithinRecurrencePeriod) {
+          continue;
+        }
+        
+        // 제외된 날짜 확인
+        bool isExcludedDate = false;
+        if (schedule.excludedDates != null && schedule.excludedDates!.isNotEmpty) {
+          final year = selectedDateOnly.year.toString();
+          final month = selectedDateOnly.month.toString().padLeft(2, '0');
+          final day = selectedDateOnly.day.toString().padLeft(2, '0');
+          final selectedDateStr = '$year-$month-$day';
+          
+          final excludedDatesList = schedule.excludedDates!.split(',');
+          isExcludedDate = excludedDatesList.contains(selectedDateStr);
+          
+          if (isExcludedDate) {
+            continue;
+          }
+        }
+        
+        // 요일 인덱스 변환
+        int dayIndex = selectedDateOnly.weekday - 1;
+        
+        if (recurrenceDaysList.length == 7 && 
+            recurrenceDaysList[dayIndex] == "1" && 
+            isWithinRecurrencePeriod && 
+            !isExcludedDate) {
+          
+          // 일정 복사본 생성 (시작/종료 시간을 선택한 날짜로 조정)
+          Schedule recurrentSchedule = Schedule(
+            id: schedule.id,
+            title: schedule.title,
+            description: schedule.description,
+            categoryId: schedule.categoryId,
+            startTime: DateTime(
+              selectedDateOnly.year,
+              selectedDateOnly.month,
+              selectedDateOnly.day,
+              schedule.startTime.hour,
+              schedule.startTime.minute,
+            ),
+            endTime: DateTime(
+              selectedDateOnly.year,
+              selectedDateOnly.month,
+              selectedDateOnly.day,
+              schedule.endTime.hour,
+              schedule.endTime.minute,
+            ),
+            recurrenceDays: schedule.recurrenceDays,
+            recurrenceStartDate: schedule.recurrenceStartDate,
+            recurrenceEndDate: schedule.recurrenceEndDate,
+            excludedDates: schedule.excludedDates,
+            reminderMinutesBefore: schedule.reminderMinutesBefore,
+            reminderTime: schedule.reminderTime,
+            priority: schedule.priority,
+            displayOnCalendar: schedule.displayOnCalendar,
+          );
+          
+          filteredGroupSchedules.add(recurrentSchedule);
+        }
+      }
+    }
+    
+    // 시작 시간 순으로 정렬
+    filteredGroupSchedules.sort((a, b) => a.startTime.compareTo(b.startTime));
+    
+    return filteredGroupSchedules;
   }
 
   @override
@@ -810,12 +976,7 @@ class _HomePageState extends State<HomePage> {
                                               Expanded(
                                                 child: GestureDetector(
                                                   onTap: () {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) => EditReminderPage(reminder: reminder),
-                                                      ),
-                                                    ).then((value) {
+                                                    context.push('/edit-reminder/${reminder.reminderId}', extra: reminder).then((value) {
                                                       // 편집 페이지에서 돌아오면 항상 데이터 새로고침
                                                       _loadData();
                                                     });
@@ -964,12 +1125,7 @@ class _HomePageState extends State<HomePage> {
                                           ),
                                           child: GestureDetector(
                                             onTap: () {
-                                              Navigator.push(
-                                      context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => EditSchedulePage(schedule: schedule),
-                                                ),
-                                              ).then((value) {
+                                              context.push('/edit-schedule/${schedule.scheduleId}', extra: schedule).then((value) {
                                                 // 일정 편집 페이지에서 돌아오면 항상 데이터 새로고침
                                                 _loadData();
                                               });
@@ -1054,6 +1210,197 @@ class _HomePageState extends State<HomePage> {
                                       },
                                     ),
                                   ),
+
+                                // 모임일정 섹션 추가
+                                const SizedBox(height: 15),
+                                const Text(
+                                  '모임일정',
+                                  style: TextStyle(
+                                    fontFamily: 'Pretendard',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600, // SemiBold
+                                    height: 1.4,
+                                    letterSpacing: -0.4,
+                                    color: Color(0xFF0062FF),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                
+                                if (_groupSchedules.isEmpty)
+                                  Container(
+                                    width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
+                                    padding: const EdgeInsets.all(5),
+                                    height: 100, // 최소 높이 설정
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: Center(
+                                        child: Text(
+                                          '등록된 모임일정이 없습니다',
+                                          style: TextStyle(
+                                            fontFamily: 'Pretendard',
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w400,
+                                            height: 1.4,
+                                            letterSpacing: -0.4,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else if (_getGroupSchedulesForSelectedDate().isEmpty)
+                                  Container(
+                                    width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
+                                    padding: const EdgeInsets.all(0), // 패딩 제거
+                                    height: 100, // 최소 높이 설정
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(0), // 패딩 제거
+                                      child: Center(
+                                        child: Text(
+                                          '선택된 날짜의 모임일정이 없습니다',
+                                          style: TextStyle(
+                                            fontFamily: 'Pretendard',
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w400,
+                                            height: 1.4,
+                                            letterSpacing: -0.4,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    width: MediaQuery.of(context).size.width * 0.9, // 너비 조정
+                                    padding: const EdgeInsets.symmetric(vertical: 15), // 상하단 여백 15픽셀
+                                    constraints: const BoxConstraints(minHeight: 100), // 최소 높이 설정
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: _getGroupSchedulesForSelectedDate().length,
+                                      padding: EdgeInsets.zero, // 패딩 제거
+                                      separatorBuilder: (context, index) => const SizedBox(height: 5), // 아이템 간 간격 5픽셀
+                                      itemBuilder: (context, index) {
+                                        final schedule = _getGroupSchedulesForSelectedDate()[index];
+                                        
+                                        final startTimeStr = DateFormat('HH:mm').format(schedule.startTime);
+                                        final endTimeStr = DateFormat('HH:mm').format(schedule.endTime);
+                                        
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                          decoration: BoxDecoration(
+                                            border: Border(
+                                              bottom: BorderSide(color: Colors.grey.shade100),
+                                            ),
+                                          ),
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              context.push('/edit-schedule/${schedule.scheduleId}', extra: schedule).then((value) {
+                                                _loadData();
+                                              });
+                                            },
+                                            behavior: HitTestBehavior.opaque, // 전체 영역을 터치 가능하도록 설정
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                // 왼쪽: 시간 정보
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      startTimeStr,
+                                                      style: const TextStyle(
+                                                        fontFamily: 'Pretendard',
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.w400,
+                                                        color: Colors.black,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '~$endTimeStr',
+                                                      style: const TextStyle(
+                                                        fontFamily: 'Pretendard',
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w400,
+                                                        color: Color(0xFF767676),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // 모임일정 표시 아이콘
+                                                Container(
+                                                  width: 4,
+                                                  height: 40,
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF0062FF), // 모임일정은 파란색으로 통일
+                                                    borderRadius: BorderRadius.circular(2),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                // 오른쪽: 제목과 메모
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          const Icon(
+                                                            Icons.group,
+                                                            size: 16,
+                                                            color: Color(0xFF0062FF),
+                                                          ),
+                                                          const SizedBox(width: 4),
+                                                          Expanded(
+                                                            child: Text(
+                                                              schedule.title,
+                                                              style: const TextStyle(
+                                                                fontFamily: 'Pretendard',
+                                                                fontSize: 16,
+                                                                fontWeight: FontWeight.w400,
+                                                                color: Colors.black,
+                                                              ),
+                                                              overflow: TextOverflow.ellipsis,
+                                                              maxLines: 1,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      if (schedule.description != null && schedule.description!.isNotEmpty)
+                                                        Text(
+                                                          schedule.description!,
+                                                          style: const TextStyle(
+                                                            fontFamily: 'Pretendard',
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.w400,
+                                                            color: Color(0xFF767676),
+                                                          ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                          maxLines: 1,
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),                               
                                 
                                 // 추가 공간
                                 const SizedBox(height: 80),
@@ -1075,14 +1422,7 @@ class _HomePageState extends State<HomePage> {
               final XFile? image = await picker.pickImage(source: ImageSource.gallery);
               
               if (image != null) {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(
-                    builder: (context) => ScheduleFromSchedulePage(
-                      initialImage: File(image.path),
-                    )
-                  )
-                );
+                context.push('/schedule-from-image', extra: File(image.path));
               }
             },
           ),
@@ -1090,7 +1430,7 @@ class _HomePageState extends State<HomePage> {
             label: '리마인더 추가',
             iconPath: 'assets/images/reminder.png',
             onPressed: () {
-              Navigator.pushNamed(context, '/add_reminder').then((value) {
+              context.push('/add-reminder').then((value) {
                 // 리마인더 추가 페이지에서 돌아오면 항상 데이터 새로고침
                 _loadData();
               });
@@ -1100,7 +1440,7 @@ class _HomePageState extends State<HomePage> {
             label: '일정 추가',
             iconPath: 'assets/images/schedule.png',
             onPressed: () {
-              Navigator.pushNamed(context, '/add_schedule').then((value) {
+              context.push('/add-schedule').then((value) {
                 // 일정 추가 페이지에서 돌아오면 항상 데이터 새로고침
                 _loadData();
               });
@@ -1707,5 +2047,21 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  void _navigateToAddSchedule() {
+    context.go('/add-schedule');
+  }
+
+  void _navigateToAddReminder() {
+    context.go('/add-reminder');
+  }
+
+  void _navigateToEditSchedule(Schedule schedule) {
+    context.go('/edit-schedule/${schedule.scheduleId}', extra: schedule);
+  }
+
+  void _navigateToEditReminder(Reminder reminder) {
+    context.go('/edit-reminder/${reminder.reminderId}', extra: reminder);
   }
 }

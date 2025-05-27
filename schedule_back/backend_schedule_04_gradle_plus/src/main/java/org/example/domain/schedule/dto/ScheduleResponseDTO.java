@@ -23,6 +23,7 @@ public class ScheduleResponseDTO {
     private LocalDateTime reminderTime;
     private Integer priority;
     private Boolean displayOnCalendar;
+    private String scheduleType; // "PERSONAL" 또는 "MEETING"
 
     // 변환 유틸
     public static ScheduleResponseDTO fromEntity(org.example.domain.schedule.entity.Schedule s) {
@@ -41,6 +42,7 @@ public class ScheduleResponseDTO {
                 .reminderTime(s.getReminderTime())
                 .priority(s.getPriority())
                 .displayOnCalendar(s.getDisplayOnCalendar())
+                .scheduleType(s.getScheduleType())
                 .build();
     }
 }

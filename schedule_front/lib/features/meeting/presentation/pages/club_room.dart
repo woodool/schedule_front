@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../../features/schedule/domain/models/schedule.dart';
+import '../../../schedule/domain/models/schedule.dart';
 
 class ClubRoom extends StatefulWidget {
   final Schedule schedule;

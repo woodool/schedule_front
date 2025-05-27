@@ -24,6 +24,7 @@ public class UpdateScheduleRequestDTO {
     private Integer reminderMinutesBefore;
     private Integer priority;
     private Boolean displayOnCalendar;
+    private String scheduleType; // "PERSONAL" 또는 "MEETING"
 
     // 수정 모드: SINGLE, FUTURE, ALL
     private RecurrenceOption option;

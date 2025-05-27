@@ -13,7 +13,12 @@ import '../../domain/models/schedule.dart';
 import '../../domain/services/schedule_service.dart';
 
 class AddSchedulePage extends StatefulWidget {
-  const AddSchedulePage({super.key});
+  final DateTime? initialDate;
+  
+  const AddSchedulePage({
+    super.key,
+    this.initialDate,
+  });
 
   @override
   State<AddSchedulePage> createState() => _AddSchedulePageState();
@@ -22,8 +27,8 @@ class AddSchedulePage extends StatefulWidget {
 class _AddSchedulePageState extends State<AddSchedulePage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now().add(const Duration(hours: 1));
+  late DateTime _startDate;
+  late DateTime _endDate;
   List<bool> _selectedDays = [false, false, false, false, false, false, false];
   DateTime? _recurrenceStartDate;
   DateTime? _recurrenceEndDate;
@@ -39,8 +44,16 @@ class _AddSchedulePageState extends State<AddSchedulePage> {
   @override
   void initState() {
     super.initState();
-    // 현재 시간으로 시작 시간 설정
-    _startDate = DateTime.now();
+    // 선택된 날짜가 있으면 해당 날짜를 사용, 없으면 현재 날짜 사용
+    final DateTime now = widget.initialDate ?? DateTime.now();
+    // 선택된 날짜의 날짜 정보만 가져옴
+    _startDate = DateTime(
+      now.year, 
+      now.month, 
+      now.day, 
+      DateTime.now().hour, 
+      DateTime.now().minute
+    );
     // 마감 시간은 시작 시간 + 1시간으로 설정
     _endDate = _startDate.add(const Duration(hours: 1));
   }

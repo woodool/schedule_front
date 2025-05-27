@@ -15,6 +15,7 @@ import '../../core/config/api_config.dart';
 import '../schedule/presentation/pages/schedule_from_image.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 
 class CalendarPage extends StatefulWidget {
   final DateTime? initialDate;
@@ -134,23 +135,73 @@ class _CalendarPageState extends State<CalendarPage> {
     // 통합 일정 목록에서 선택된 날짜와 일치하는 일정만 필터링
     List<Schedule> events = [];
     
-    // 1. 일반 일정 필터링 (시작 날짜가 선택된 날짜와 일치하는 경우)
+    // 날짜 비교를 위한 선택된 날짜
+    final selectedDate = DateTime(
+      day.year,
+      day.month,
+      day.day,
+    );
+    
     for (var schedule in _events.values.expand((e) => e)) {
-      final scheduleDate = DateTime(
+      // 1. 기간이 여러 날인 일정 처리 (시작일부터 종료일 사이에 날짜가 포함되는 경우)
+      final scheduleStartDate = DateTime(
         schedule.startTime.year,
         schedule.startTime.month,
         schedule.startTime.day,
       );
       
-      final selectedDate = DateTime(
-        day.year,
-        day.month,
-        day.day,
+      final scheduleEndDate = DateTime(
+        schedule.endTime.year,
+        schedule.endTime.month,
+        schedule.endTime.day,
       );
       
-      if (scheduleDate.isAtSameMomentAs(selectedDate)) {
-        events.add(schedule);
-      } 
+      // 선택한 날짜가 일정의 시작일과 종료일 사이에 있는지 확인
+      // (시작일 <= 선택일 <= 종료일)
+      if ((selectedDate.isAtSameMomentAs(scheduleStartDate) || 
+           selectedDate.isAfter(scheduleStartDate)) && 
+          (selectedDate.isAtSameMomentAs(scheduleEndDate) || 
+           selectedDate.isBefore(scheduleEndDate))) {
+        // 해당 날짜에 맞게 시간 조정 (시작일이 아닌 날은 00:00부터, 종료일이 아닌 날은 23:59까지)
+        DateTime adjustedStartTime;
+        DateTime adjustedEndTime;
+        
+        if (selectedDate.isAtSameMomentAs(scheduleStartDate)) {
+          // 시작일이면 원래 시작 시간 사용
+          adjustedStartTime = schedule.startTime;
+        } else {
+          // 시작일이 아니면 00:00 시작
+          adjustedStartTime = DateTime(
+            selectedDate.year,
+            selectedDate.month,
+            selectedDate.day,
+            0,
+            0,
+          );
+        }
+        
+        if (selectedDate.isAtSameMomentAs(scheduleEndDate)) {
+          // 종료일이면 원래 종료 시간 사용
+          adjustedEndTime = schedule.endTime;
+        } else {
+          // 종료일이 아니면 23:59 종료
+          adjustedEndTime = DateTime(
+            selectedDate.year,
+            selectedDate.month,
+            selectedDate.day,
+            23,
+            59,
+          );
+        }
+        
+        // 수정된 일정을 이벤트에 추가
+        Schedule adjustedSchedule = schedule.copyWith(
+          startTime: adjustedStartTime,
+          endTime: adjustedEndTime,
+        );
+        
+        events.add(adjustedSchedule);
+      }
       // 2. 반복 일정 필터링
       else if (schedule.recurrenceDays != null && schedule.recurrenceDays!.isNotEmpty) {
         // 새 헬퍼 메서드 사용
@@ -619,14 +670,7 @@ class _CalendarPageState extends State<CalendarPage> {
               final XFile? image = await picker.pickImage(source: ImageSource.gallery);
               
               if (image != null) {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(
-                    builder: (context) => ScheduleFromSchedulePage(
-                      initialImage: File(image.path),
-                    )
-                  )
-                );
+                context.push('/schedule-from-image', extra: File(image.path));
               }
             },
           ),
@@ -642,7 +686,7 @@ class _CalendarPageState extends State<CalendarPage> {
             label: '일정 추가',
             iconPath: 'assets/images/schedule.png',
             onPressed: () async {
-              final result = await Navigator.pushNamed(context, '/add_schedule');
+              final result = await context.push('/add-schedule', extra: _selectedDay);
               if (result == true) {
                 // 일정 추가 후 새로고침
                 _loadSchedules();
@@ -756,11 +800,7 @@ class _CalendarPageState extends State<CalendarPage> {
       return GestureDetector(
         onTap: () async {
           // 일정 수정 페이지로 이동
-          final result = await Navigator.pushNamed(
-            context, 
-            '/edit_schedule',
-            arguments: schedule,
-          );
+          final result = await context.push('/edit-schedule/${schedule.scheduleId}', extra: schedule);
           
           // 일정 수정 후 새로고침
           if (result == true) {
@@ -871,11 +911,7 @@ class _CalendarPageState extends State<CalendarPage> {
       return GestureDetector(
         onTap: () async {
           // 일정 수정 페이지로 이동
-          final result = await Navigator.pushNamed(
-            context, 
-            '/edit_schedule',
-            arguments: schedule,
-          );
+          final result = await context.push('/edit-schedule/${schedule.scheduleId}', extra: schedule);
           
           // 일정 수정 후 새로고침
           if (result == true) {
@@ -1477,5 +1513,13 @@ class _CalendarPageState extends State<CalendarPage> {
         );
       }
     }
+  }
+
+  void _navigateToAddSchedule(DateTime selectedDate) {
+    context.go('/calendar/add-schedule', extra: selectedDate);
+  }
+
+  void _navigateToEditSchedule(Schedule schedule) {
+    context.go('/calendar/edit-schedule/${schedule.scheduleId}', extra: schedule);
   }
 } 

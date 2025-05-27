@@ -11,8 +11,10 @@ import java.time.LocalDateTime;
 @Data
 public class AutoScheduleResponseDTO {
     private String title;
-    private String description;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
+    private String description;
+    private int priority;
+    private Long replacedScheduleId;
 }
 

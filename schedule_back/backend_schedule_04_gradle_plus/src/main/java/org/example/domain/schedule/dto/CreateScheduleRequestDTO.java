@@ -25,4 +25,5 @@ public class CreateScheduleRequestDTO {
     private Integer reminderMinutesBefore;
     private Integer priority;
     private Boolean displayOnCalendar;
+    private String scheduleType; // "PERSONAL" 또는 "MEETING"
 }

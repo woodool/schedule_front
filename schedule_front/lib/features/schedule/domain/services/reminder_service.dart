@@ -3,16 +3,15 @@ import 'dart:convert';
 import '../models/reminder.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/config/api_config.dart';
+import '../../../../core/services/auth_service.dart';
 import '../models/Recurrence_option.Dart';
 
 class ReminderService {
   // 중앙화된 API 설정 사용
 
   Future<List<Reminder>> getReminders() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
 
     final response = await http.get(
       Uri.parse(ApiConfig.remindersEndpoint),
@@ -30,10 +29,8 @@ class ReminderService {
   }
 
   Future<void> saveReminder(Reminder reminder) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
     
     // 반복 설정이 있는지 확인
     bool hasRecurrence = reminder.recurrenceDays.isNotEmpty && 
@@ -80,15 +77,13 @@ class ReminderService {
   }
 
   Future<void> updateReminder(Reminder reminder) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
     // reminderId가 null이면 예외 발생
     if (reminder.reminderId == null) {
       throw Exception('리마인더 ID가 없습니다');
     }
 
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
     
     // 반복 설정이 있는지 확인
     bool hasRecurrence = reminder.recurrenceDays.isNotEmpty && 
@@ -145,10 +140,8 @@ class ReminderService {
   }
 
   Future<void> deleteReminder(String reminderId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
 
     final response = await http.delete(
       Uri.parse(ApiConfig.reminderById(reminderId)),
@@ -166,10 +159,8 @@ class ReminderService {
   
   // 추가된 메소드: 리마인더 상태 토글
   Future<void> toggleReminder(String reminderId, bool isChecked) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
 
     final response = await http.put(
       Uri.parse('${ApiConfig.remindersEndpoint}/$reminderId/toggle'),
@@ -187,10 +178,8 @@ class ReminderService {
   
   // 추가된 메소드: 반복 리마인더 삭제
   Future<void> deleteRecurringReminder(String reminderId, RecurrenceDeleteMode mode) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-
-    final idToken = await user.getIdToken(true);
+    // AuthService 사용
+    final idToken = await AuthService.getIdToken();
     final modeString = mode.toString().split('.').last; // enum 값을 문자열로 변환
 
     final response = await http.delete(

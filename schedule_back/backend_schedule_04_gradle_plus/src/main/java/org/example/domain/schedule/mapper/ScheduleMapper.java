@@ -22,6 +22,7 @@ public class ScheduleMapper {
                     dto.getReminderMinutesBefore() != null ? dto.getReminderMinutesBefore() : 0))
                 .priority(dto.getPriority())
                 .displayOnCalendar(dto.getDisplayOnCalendar())
+                .scheduleType(dto.getScheduleType() != null ? dto.getScheduleType() : "PERSONAL")
                 .build();
         return s;
     }
@@ -43,6 +44,7 @@ public class ScheduleMapper {
                     dto.getReminderMinutesBefore() != null ? dto.getReminderMinutesBefore() : 0))
                 .priority(dto.getPriority())
                 .displayOnCalendar(dto.getDisplayOnCalendar())
+                .scheduleType(dto.getScheduleType() != null ? dto.getScheduleType() : "PERSONAL")
                 .build();
         return s;
     }
@@ -62,5 +64,8 @@ public class ScheduleMapper {
             dto.getReminderMinutesBefore() != null ? dto.getReminderMinutesBefore() : 0));
         existing.setPriority(dto.getPriority());
         existing.setDisplayOnCalendar(dto.getDisplayOnCalendar());
+        if (dto.getScheduleType() != null) {
+            existing.setScheduleType(dto.getScheduleType());
+        }
     }
 }

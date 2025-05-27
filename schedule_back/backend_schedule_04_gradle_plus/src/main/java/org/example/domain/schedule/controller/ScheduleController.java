@@ -57,16 +57,16 @@ public class ScheduleController {
             Authentication auth) {
         String uid = auth.getName();
         
-        // 디버그 로깅
-        System.out.println("일정 삭제 컨트롤러 - ID: " + id + 
-                          ", 옵션: " + option + 
-                          ", 발생일자: " + (fromDate != null ? fromDate : "지정되지 않음") + 
-                          ", 사용자: " + uid);
+        // // 디버그 로깅
+        // System.out.println("일정 삭제 컨트롤러 - ID: " + id + 
+        //                   ", 옵션: " + option + 
+        //                   ", 발생일자: " + (fromDate != null ? fromDate : "지정되지 않음") + 
+        //                   ", 사용자: " + uid);
                           
-        if ((option == RecurrenceOption.SINGLE || option == RecurrenceOption.FUTURE) && fromDate == null) {
-            System.out.println("  경고: " + option + " 옵션에는 발생일자가 필요합니다.");
-            return ResponseEntity.badRequest().build();
-        }
+        // if ((option == RecurrenceOption.SINGLE || option == RecurrenceOption.FUTURE) && fromDate == null) {
+        //     System.out.println("  경고: " + option + " 옵션에는 발생일자가 필요합니다.");
+        //     return ResponseEntity.badRequest().build();
+        // }
         
         service.delete(id, option, fromDate, uid);
         return ResponseEntity.ok().build();
@@ -131,30 +131,21 @@ public class ScheduleController {
         return ResponseEntity.ok(service.photoAddSchedule(requestDTO, firebaseUid));
     }
 
-    /**
-     * 빈 시간대 추천
-     * @return 추천 리스트 또는 "일정이 없습니다"
-     */
+    /** 9) 자동 일정 배치 기능 */
     @PostMapping("/suggestions")
-    public ResponseEntity<?> getSuggestions(
+    public ResponseEntity<List<AutoScheduleResponseDTO>> getAutoScheduleSuggestions(
             @RequestBody AutoScheduleRequestDTO request,
             Authentication authentication) {
-        List<AutoScheduleResponseDTO> suggestions =
-                service.generateSuggestions(request, authentication.getName());
-        if (suggestions.isEmpty()) {
-            return ResponseEntity.ok("일정이 없습니다");
-        }
-        return ResponseEntity.ok(suggestions);
+        String firebaseUid = authentication.getName();
+        return ResponseEntity.ok(service.generateSuggestions(request, firebaseUid));
     }
 
-    /**
-     * 사용자가 선택한 추천 일정 저장
-     */
     @PostMapping("/confirm")
     public ResponseEntity<String> confirmSchedule(
             @RequestBody AutoScheduleResponseDTO selected,
             Authentication authentication) {
-        service.saveConfirmedSchedule(selected, authentication.getName());
+        String firebaseUid = authentication.getName();
+        service.saveConfirmedSchedule(selected, firebaseUid);
         return ResponseEntity.ok("일정 저장 완료");
     }
 }

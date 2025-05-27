@@ -15,6 +15,8 @@ class Schedule {
   final DateTime? reminderTime;         // backend 계산
   final int? priority;
   final bool displayOnCalendar;
+  final int? timeSlotUnit;              // 시간 단위 (분 단위로 저장: 15, 30, 60, 120)
+  final String? scheduleType;           // "PERSONAL" 또는 "MEETING"
 
   Schedule({
     this.id,
@@ -31,6 +33,8 @@ class Schedule {
     this.reminderTime,
     this.priority,
     required this.displayOnCalendar,
+    this.timeSlotUnit,
+    this.scheduleType,
   });
 
   int? get scheduleId => id;
@@ -51,6 +55,8 @@ class Schedule {
     DateTime? reminderTime,
     int? priority,
     bool? displayOnCalendar,
+    int? timeSlotUnit,
+    String? scheduleType,
   }) {
     return Schedule(
       id: scheduleId ?? id ?? this.id,
@@ -67,6 +73,8 @@ class Schedule {
       reminderTime: reminderTime ?? this.reminderTime,
       priority: priority ?? this.priority,
       displayOnCalendar: displayOnCalendar ?? this.displayOnCalendar,
+      timeSlotUnit: timeSlotUnit ?? this.timeSlotUnit,
+      scheduleType: scheduleType ?? this.scheduleType,
     );
   }
 
@@ -91,6 +99,8 @@ class Schedule {
             : null,
         priority: json['priority'],
         displayOnCalendar: json['displayOnCalendar'],
+        timeSlotUnit: json['timeSlotUnit'],
+        scheduleType: json['scheduleType'],
       );
 
   Map<String, dynamic> toJson() {
@@ -115,6 +125,8 @@ class Schedule {
     if (reminderMinutesBefore != null) data['reminderMinutesBefore'] = reminderMinutesBefore;
     if (reminderTime != null) data['reminderTime'] = reminderTime?.toIso8601String();
     if (priority != null) data['priority'] = priority;
+    if (timeSlotUnit != null) data['timeSlotUnit'] = timeSlotUnit;
+    if (scheduleType != null) data['scheduleType'] = scheduleType;
 
     // 디버그 출력
     print('Schedule.toJson() 호출: $data');
@@ -139,6 +151,8 @@ class Schedule {
         'priority': priority,
         'displayOnCalendar': displayOnCalendar,
         'excludedDates': excludedDates,
+        'timeSlotUnit': timeSlotUnit,
+        'scheduleType': scheduleType,
       };
 
   Map<String, dynamic> toJsonForUpdate({required String option, DateTime? occurrenceDate}) {

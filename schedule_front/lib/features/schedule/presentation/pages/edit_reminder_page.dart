@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../../core/config/api_config.dart';
+import '../../../../core/services/auth_service.dart';
 
 // 반복 일정 편집 모드 enum 정의
 enum RecurrenceEditMode {
@@ -18,8 +19,13 @@ enum RecurrenceEditMode {
 
 class EditReminderPage extends StatefulWidget {
   final Reminder reminder;
+  final DateTime? selectedDate;  // 달력에서 선택한 날짜
 
-  const EditReminderPage({super.key, required this.reminder});
+  const EditReminderPage({
+    required this.reminder,
+    this.selectedDate,
+    Key? key
+  }) : super(key: key);
 
   @override
   State<EditReminderPage> createState() => _EditReminderPageState();
@@ -253,7 +259,7 @@ class _EditReminderPageState extends State<EditReminderPage> {
       // 선택된 옵션에 따라 다른 API 호출
       if (editMode == RecurrenceEditMode.single) {
         // 이 리마인더만 수정 - 단일 발생 수정 API 호출
-        await _updateSingleOccurrence(reminder);
+        await _updateSingleOccurrence();
       } else {
         // 전체 시리즈 수정 - 기존 API 호출
         await _reminderService.updateReminder(reminder);
@@ -275,23 +281,20 @@ class _EditReminderPageState extends State<EditReminderPage> {
     }
   }
   
-  // 단일 발생 리마인더 수정
-  Future<void> _updateSingleOccurrence(Reminder reminder) async {
-    final reminderId = reminder.reminderId;
+  // 단일 발생 수정 API 호출
+  Future<void> _updateSingleOccurrence() async {
+    try {
+      // 기존 반복 일정 정보 가져오기
+      final reminderId = widget.reminder.reminderId;
     if (reminderId == null) {
       throw Exception('리마인더 ID가 없습니다');
     }
     
-    // 오늘 날짜를 ISO 8601 형식으로 변환
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
+      // 오늘 날짜 ISO 형식
+      final todayDate = widget.selectedDate ?? DateTime.now();
     
-    try {
-      // 단일 발생 수정 API 호출
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-      
-      final idToken = await user.getIdToken(true);
+      // 토큰 가져오기 - AuthService 사용
+      final idToken = await AuthService.getIdToken();
       
       // 반복 리마인더에서 특정 날짜 제외 후 단일 리마인더로 추가
       // 1. 기존 반복 일정에서 오늘 날짜 제외
@@ -309,9 +312,9 @@ class _EditReminderPageState extends State<EditReminderPage> {
       // 2. 단일 리마인더로 추가
       await _reminderService.saveReminder(
         Reminder(
-          reminder_title: reminder.reminder_title,
+          reminder_title: widget.reminder.reminder_title,
           recurrenceDays: "0,0,0,0,0,0,0", // 반복 없음
-          reminderMinutesBefore: reminder.reminderMinutesBefore,
+          reminderMinutesBefore: widget.reminder.reminderMinutesBefore,
           date: todayDate.toIso8601String(),
         )
       );
@@ -544,10 +547,7 @@ class _EditReminderPageState extends State<EditReminderPage> {
     if (isRecurring) {
       try {
         // 백엔드 API 호출: 반복 리마인더에서 현재 날짜 제외
-        final user = FirebaseAuth.instance.currentUser;
-        if (user == null) throw Exception('사용자가 로그인되어 있지 않습니다');
-        
-        final idToken = await user.getIdToken(true);
+        final idToken = await AuthService.getIdToken();
         
         // 반복 리마인더에서 특정 날짜 제외하는 API 호출
         final excludeResponse = await http.post(
@@ -645,8 +645,13 @@ class _EditReminderPageState extends State<EditReminderPage> {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: Colors.black,  // 색상을 검정색으로 변경
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
