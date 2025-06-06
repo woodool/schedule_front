@@ -29,7 +29,6 @@ public interface MeetingMapper {
     MeetingParticipant toMeetingParticipant(MeetingParticipantDTO participantDTO);
 
     // MeetingAnnouncement 매핑
-    @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "creatorName", ignore = true)
     MeetingAnnouncementDTO toMeetingAnnouncementDTO(MeetingAnnouncement announcement);
     

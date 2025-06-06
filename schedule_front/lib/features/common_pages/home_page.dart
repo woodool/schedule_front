@@ -1684,6 +1684,10 @@ class _HomePageState extends State<HomePage> {
         context: context,
         builder: (context) {
           return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             title: const Text('일정 삭제'),
             content: const Text('이 일정을 삭제하시겠습니까?'),
             actions: [
@@ -1714,50 +1718,39 @@ class _HomePageState extends State<HomePage> {
     }
     
     // 반복 일정 - 삭제 옵션 선택 다이얼로그
-    String? option = await showDialog<String>(
+    final result = await showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('반복 일정 삭제'),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('이 반복 일정을 어떻게 삭제하시겠습니까?'),
-              SizedBox(height: 16),
-              Text('• 이 일정만: 현재 선택한 날짜의 일정만 삭제합니다.'),
-              Text('• 이후 일정: 현재 선택한 날짜부터의 모든 일정을 삭제합니다.'),
-              Text('• 전체 일정: 반복되는 모든 일정을 삭제합니다.'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('취소'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop('SINGLE'),
-              child: const Text('이 일정만'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop('ALL'),
-              child: const Text('전체 일정'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => RecurrenceDeleteDialog(isRecurring: isRecurring),
     );
     
-    if (option == null) return; // 취소됨
+    if (result == null) {
+      // 취소됨
+      return;
+    }
     
     try {
       // 현재 선택된 날짜를 발생일자로 사용 
       DateTime? occurrenceDate;
+      String option = 'ALL';
       
-      if (option == 'SINGLE' || option == 'ALL') {
-        // 발생일자 지정이 필요한 경우에만 사용
-        occurrenceDate = _selectedDate;
-        print('삭제 발생일 지정: $occurrenceDate (옵션: $option)');
+      if (result is bool && result == true) {
+        // 일회성 일정이거나 단순 확인에서 '삭제' 선택한 경우
+        option = 'ALL';
+      } else if (result is RecurrenceDeleteMode) {
+        // 반복 일정의 경우 선택한 모드에 따라 처리
+        switch (result) {
+          case RecurrenceDeleteMode.SINGLE:
+            option = 'SINGLE';
+            occurrenceDate = _selectedDate;
+            break;
+          case RecurrenceDeleteMode.FUTURE:
+            option = 'FUTURE';
+            occurrenceDate = _selectedDate;
+            break;
+          case RecurrenceDeleteMode.ALL:
+            option = 'ALL';
+            break;
+        }
       }
       
       await _scheduleService.deleteSchedule(
@@ -1766,8 +1759,23 @@ class _HomePageState extends State<HomePage> {
         occurrenceDate: occurrenceDate,
       );
       
+      String successMessage = '일정이 삭제되었습니다';
+      if (isRecurring && result is RecurrenceDeleteMode) {
+        switch (result) {
+          case RecurrenceDeleteMode.SINGLE:
+            successMessage = '해당 일정만 삭제되었습니다';
+            break;
+          case RecurrenceDeleteMode.FUTURE:
+            successMessage = '이 일정 및 향후 일정이 삭제되었습니다';
+            break;
+          case RecurrenceDeleteMode.ALL:
+            successMessage = '전체 반복 일정이 삭제되었습니다';
+            break;
+        }
+      }
+      
       _loadData();
-      _showSnackBar('일정이 삭제되었습니다.');
+      _showSnackBar(successMessage);
     } catch (e) {
       _showSnackBar('일정 삭제 중 오류가 발생했습니다: $e');
     }

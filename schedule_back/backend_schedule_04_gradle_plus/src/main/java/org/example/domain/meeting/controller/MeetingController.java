@@ -195,4 +195,34 @@ public class MeetingController {
         meetingService.deleteScheduleException(exceptionId, firebaseUid);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping(value = "/{roomId}/announcement", consumes = "text/plain")
+    public ResponseEntity<Void> updateAnnouncement(
+            @PathVariable Integer roomId,
+            @RequestBody String announcement,
+            @RequestHeader("Firebase-UID") String userId) {
+        meetingService.updateAnnouncement(roomId, announcement, userId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping(value = "/{roomId}/announcement", produces = "text/plain")
+    public ResponseEntity<String> getAnnouncement(@PathVariable Integer roomId) {
+        String announcement = meetingService.getAnnouncement(roomId);
+        return ResponseEntity.ok(announcement);
+    }
+
+    @PutMapping(value = "/{roomId}/memo", consumes = "text/plain")
+    public ResponseEntity<Void> updateMemo(
+            @PathVariable Integer roomId,
+            @RequestBody String memo,
+            @RequestHeader("Firebase-UID") String userId) {
+        meetingService.updateMemo(roomId, memo, userId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping(value = "/{roomId}/memo", produces = "text/plain")
+    public ResponseEntity<String> getMemo(@PathVariable Integer roomId) {
+        String memo = meetingService.getMemo(roomId);
+        return ResponseEntity.ok(memo);
+    }
 } 

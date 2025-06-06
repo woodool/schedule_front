@@ -20,6 +20,16 @@ public interface MeetingService {
     
     MeetingRoomDTO joinMeetingRoomByInviteCode(String inviteCode, String userId);
     
+    // 공지사항 관련 메소드
+    void updateAnnouncement(Integer roomId, String announcement, String userId);
+    
+    String getAnnouncement(Integer roomId);
+    
+    // 메모 관련 메소드
+    void updateMemo(Integer roomId, String memo, String userId);
+    
+    String getMemo(Integer roomId);
+    
     // MeetingParticipant 관련 메소드
     List<MeetingParticipantDTO> getMeetingParticipants(Integer roomId);
     

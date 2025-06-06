@@ -3,7 +3,7 @@ class ApiConfig {
   // static const String baseUrl = 'http://192.168.219.101:8080/api';
   // static const String baseUrl = 'http://172.16.7.130:8080/api';
   // static const String baseUrl = 'http://192.168.219.101:8080/api';
-  static const String baseUrl = 'http://192.168.219.100:8080/api';
+  static const String baseUrl = 'http://192.168.219.101:8080/api';
   
   // 이미지 분석 서버 URL
   static const String imageAnalysisUrl = 'http://192.168.219.103:8000/api/analyze-image';

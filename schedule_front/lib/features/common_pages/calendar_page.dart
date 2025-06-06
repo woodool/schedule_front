@@ -362,12 +362,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 icon: Image.asset('assets/images/calendarsearch.png', width: 24, height: 24),
                 onPressed: () async {
                   // 검색 화면으로 이동
-                  final selectedDate = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ScheduleSearchPage(),
-                    ),
-                  );
+                  final selectedDate = await context.push('/schedule/search');
                   
                   // 검색 화면에서 날짜 정보를 받아오면 해당 날짜로 이동
                   if (selectedDate != null && selectedDate is DateTime) {
@@ -1179,49 +1174,90 @@ class _CalendarPageState extends State<CalendarPage> {
 
   // 일정 옵션 (삭제/미루기) 대화상자 표시
   void _showScheduleOptions(Schedule schedule) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text(
-                  '일정 삭제',
-                  style: TextStyle(
-                    fontFamily: 'Pretendard',
-                    fontWeight: FontWeight.w500,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        title: const Text(
+          '일정 옵션',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.black,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 미루기 버튼
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                _showPostponeDialog(schedule);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade200),
                   ),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteSchedule(schedule);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.calendar_today, color: Colors.blue),
-                title: const Text(
+                child: const Text(
                   '일정 미루기',
                   style: TextStyle(
                     fontFamily: 'Pretendard',
-                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showPostponeDialog(schedule);
-                },
               ),
-              const SizedBox(height: 8),
-            ],
+            ),
+            // 삭제 버튼
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                _deleteSchedule(schedule);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Text(
+                  '일정 삭제',
+                  style: TextStyle(
+                    fontFamily: 'Pretendard',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.red,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              '취소',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black,
+              ),
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 

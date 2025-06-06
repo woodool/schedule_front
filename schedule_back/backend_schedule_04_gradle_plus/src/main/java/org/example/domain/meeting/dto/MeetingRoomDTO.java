@@ -26,6 +26,8 @@ public class MeetingRoomDTO {
     private String categoryName;
     private Integer capacity;
     private String description;
+    private String announcement;
+    private String memo;
     private String inviteCode;
     private String createdBy;
     private LocalDateTime createdAt;

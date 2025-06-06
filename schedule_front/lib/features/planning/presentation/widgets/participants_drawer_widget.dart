@@ -27,6 +27,7 @@ class ParticipantsDrawerWidget extends StatelessWidget {
     
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.45,
+      backgroundColor: Colors.white,
       child: Column(
         children: [
           Container(
@@ -38,12 +39,18 @@ class ParticipantsDrawerWidget extends StatelessWidget {
                 fontFamily: 'Pretendard',
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+                color: Colors.black,
               ),
             ),
           ),
           Expanded(
             child: participants.isEmpty 
-              ? const Center(child: Text('참여자가 없습니다.'))
+              ? const Center(
+                  child: Text(
+                    '참여자가 없습니다.',
+                    style: TextStyle(color: Colors.black),
+                  ),
+                )
               : ListView.builder(
                 itemCount: participants.length,
                 itemBuilder: (context, index) {
@@ -95,6 +102,7 @@ class ParticipantsDrawerWidget extends StatelessWidget {
                         fontFamily: 'Pretendard',
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
+                        color: Colors.black,
                       ),
                     ),
                   );

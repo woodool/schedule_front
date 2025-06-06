@@ -59,4 +59,10 @@ public class UserService {
         return userRepository.findByFirebaseUid(decodedToken.getUid())
                 .orElseThrow(() -> new RuntimeException("등록되지 않은 사용자입니다."));
     }
+
+    @Transactional(readOnly = true)
+    public User getUserByFirebaseUid(String firebaseUid) {
+        return userRepository.findByFirebaseUid(firebaseUid)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+    }
 } 

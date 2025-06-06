@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/planning/presentation/pages/planning_room_screen.dart';
 import '../../features/planning/domain/models/planning_room.dart';
-import '../../features/meeting/presentation/pages/club_room.dart';
+import '../../features/meeting/presentation/pages/meeting_room.dart';
 import '../../features/schedule/domain/models/schedule.dart';
+import '../../features/meeting/domain/models/meeting_room.dart';
 
 class PlanningRoutes {
   static const String room = '/planning/room';
@@ -33,9 +34,10 @@ class PlanningRoutes {
           if (args == null) {
             return const SizedBox.shrink();
           }
-          return ClubRoom(
-            schedule: args['schedule'] as Schedule,
-            isHost: args['isHost'] as bool? ?? false,
+          return MeetingRoomPage(
+            meetingRoom: args['meetingRoom'] as MeetingRoom,
+            participantCount: args['participantCount'] as int? ?? 6,
+            userId: args['userId'] as String? ?? 'anonymous',
           );
         },
       ),

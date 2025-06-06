@@ -17,9 +17,10 @@ import '../../features/common_pages/calendar_page.dart';
 import '../../features/common_pages/meeting_page.dart';
 import '../../features/common_pages/settings_page.dart';
 import '../../features/planning/presentation/pages/create_planning_page.dart';
-import '../../features/meeting/presentation/pages/club_room_create_page.dart';
 import '../widgets/main_screen_shell.dart';
 import 'planning_routes.dart';
+import 'meeting_routes.dart';
+import '../../features/schedule/presentation/pages/schedule_search_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -46,6 +47,7 @@ final goRouter = GoRouter(
       '/edit-reminder',
       '/edit-schedule',
       '/planning/room',
+      '/meeting/room',
     ];
     
     // 인증이 필요하지 않은 경로 목록
@@ -76,6 +78,12 @@ final goRouter = GoRouter(
       return planningRedirect;
     }
     
+    // Meeting 라우트 리다이렉션 체크
+    final meetingRedirect = MeetingRoutes.redirect(context, state);
+    if (meetingRedirect != null) {
+      return meetingRedirect;
+    }
+    
     print('DEBUG: No redirection needed');
     return null;
   },
@@ -92,7 +100,7 @@ final goRouter = GoRouter(
       builder: (context, state) => const SignupPage(),
     ),
     
-    // 메인 ShellRoute (하단 네비게이션 바를 포함하지않않는 화면들)
+    // 메인 ShellRoute (하단 네비게이션 바를 포함하지않는 화면들)
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) {
@@ -139,6 +147,11 @@ final goRouter = GoRouter(
                 final image = state.extra as File;
                 return ScheduleFromImagePage(initialImage: image);
               },
+            ),
+            GoRoute(
+              path: 'schedule/search',
+              parentNavigatorKey: _rootNavigatorKey,
+              builder: (context, state) => const ScheduleSearchPage(),
             ),
           ],
         ),
@@ -190,11 +203,7 @@ final goRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const CreatePlanningPage(),
     ),
-    // 모임 만들기 라우트
-    GoRoute(
-      path: '/create-club',
-      parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const ClubRoomCreatePage(),
-    ),
+    // 모임 관련 라우트
+    ...MeetingRoutes.getRoutes(),
   ],
 ); 

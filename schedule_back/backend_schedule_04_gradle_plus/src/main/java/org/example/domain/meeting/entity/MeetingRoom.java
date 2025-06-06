@@ -1,11 +1,11 @@
 package org.example.domain.meeting.entity;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
@@ -52,6 +52,12 @@ public class MeetingRoom {
 
     @Column(name = "description")
     private String description;
+
+    @Column(name = "announcement")
+    private String announcement;
+
+    @Column(name = "memo")
+    private String memo;
 
     @Column(name = "invite_code", nullable = false, unique = true)
     private String inviteCode;

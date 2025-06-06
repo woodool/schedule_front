@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:schedule/features/common_widgets/add_button.dart';
 import 'package:schedule/features/planning/presentation/pages/create_planning_page.dart';
-import 'package:schedule/features/meeting/presentation/pages/club_room_create_page.dart';
 import 'package:schedule/features/planning/domain/services/planning_service.dart';
+import 'package:schedule/features/meeting/domain/services/meeting_service.dart';
 import 'package:schedule/features/schedule/domain/services/schedule_service.dart';
 import 'package:schedule/features/planning/domain/models/planning_room.dart';
+import 'package:schedule/features/meeting/domain/models/meeting_room.dart';
 import 'package:schedule/features/planning/presentation/pages/planning_room_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 class MeetingPage extends StatefulWidget {
   const MeetingPage({super.key});
-
+//cfd7b54
   @override
   State<MeetingPage> createState() => _MeetingPageState();
 }
@@ -20,14 +21,15 @@ class _MeetingPageState extends State<MeetingPage> {
   bool _isScheduleSelected = true;
   final ScheduleService _scheduleService = ScheduleService();
   final PlanningService _planningService = PlanningService();
+  final MeetingService _meetingService = MeetingService();
   bool _isLoading = false;
   String? _errorMessage;
   
   // 일정 계획 방 목록
   List<PlanningRoom> _planningRooms = [];
   
-  // 모임 방 목록 (추가)
-  List<PlanningRoom> _clubRooms = [];
+  // 모임 방 목록
+  List<MeetingRoom> _meetingRooms = [];
   
   // 각 방에 대한 참여자 수를 저장할 맵
   Map<int, int> _participantCounts = {};
@@ -38,12 +40,9 @@ class _MeetingPageState extends State<MeetingPage> {
   @override
   void initState() {
     super.initState();
-    // 현재 사용자 ID 가져오기
     _getCurrentUserId();
-    
-    // 앱 시작 시 방 목록 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadPlanningRooms();
+      _loadRooms();
     });
   }
 
@@ -60,53 +59,69 @@ class _MeetingPageState extends State<MeetingPage> {
     }
   }
   
-  // 일정 계획 방 목록을 로드하는 함수
-  Future<void> _loadPlanningRooms() async {
+  // 방 목록을 로드하는 함수
+  Future<void> _loadRooms() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
     
     try {
-      // 일정 방 목록 가져오기
-      final rooms = await _planningService.getPlanningRooms();
-      
-      // 일정 방과 모임 방 구분
-      final planningRooms = <PlanningRoom>[];
-      final clubRooms = <PlanningRoom>[];
-      
-      for (var room in rooms) {
-        // TODO: 실제로는 서버에서 방 유형을 구분하여 받아와야 함
-        // 임시 구현: 방 이름에 "모임"이 포함된 경우 모임 방으로 분류
-        if (room.roomName.contains("모임")) {
-          clubRooms.add(room);
-        } else {
-          planningRooms.add(room);
-        }
-      }
-      
-      // 각 방에 대한 참여자 수 가져오기
-      final participantCounts = <int, int>{};
-      for (var room in rooms) {
-        if (room.roomId != null) {
-          try {
-            final participants = await _planningService.getPlanningParticipants(room.roomId!);
-            participantCounts[room.roomId!] = participants.length;
-          } catch (e) {
-            participantCounts[room.roomId!] = 0;
+      if (_isScheduleSelected) {
+        // 일정 계획 방 목록 가져오기
+        final rooms = await _planningService.getPlanningRooms();
+        final participantCounts = <int, int>{};
+        
+        for (var room in rooms) {
+          if (room.roomId != null) {
+            try {
+              final participants = await _planningService.getPlanningParticipants(room.roomId!);
+              participantCounts[room.roomId!] = participants.length;
+            } catch (e) {
+              print('일정 방 참여자 수 조회 실패: $e');
+              participantCounts[room.roomId!] = 0;
+            }
           }
         }
-      }
-      
-      if (mounted) {
-        setState(() {
-          _planningRooms = planningRooms;
-          _clubRooms = clubRooms;
-          _participantCounts = participantCounts;
-          _isLoading = false;
-        });
+        
+        if (mounted) {
+          setState(() {
+            _planningRooms = rooms;
+            _participantCounts = participantCounts;
+            _isLoading = false;
+          });
+        }
+      } else {
+        // 모임 방 목록 가져오기
+        print('모임 방 목록 가져오기 시작');
+        final rooms = await _meetingService.getMeetingRooms();
+        print('가져온 모임 방 수: ${rooms.length}');
+        final participantCounts = <int, int>{};
+        
+        for (var room in rooms) {
+          if (room.roomId != null) {
+            try {
+              final participants = await _meetingService.getMeetingParticipants(room.roomId!);
+              participantCounts[room.roomId!] = participants.length;
+              print('모임 방 ${room.roomId}의 참여자 수: ${participants.length}');
+            } catch (e) {
+              print('모임 방 참여자 수 조회 실패: $e');
+              participantCounts[room.roomId!] = 0;
+            }
+          }
+        }
+        
+        if (mounted) {
+          setState(() {
+            _meetingRooms = rooms;
+            _participantCounts = participantCounts;
+            _isLoading = false;
+          });
+          print('모임 방 목록 상태 업데이트 완료');
+        }
       }
     } catch (e) {
+      print('방 목록 로드 중 오류 발생: $e');
       if (mounted) {
         setState(() {
           _errorMessage = '방 목록을 불러오는데 실패했습니다: $e';
@@ -120,11 +135,9 @@ class _MeetingPageState extends State<MeetingPage> {
   void _navigateToCreatePlanningPage() async {
     final result = await context.push('/create-planning');
     
-    // 방 생성 결과와 상관없이 목록 새로고침
     if (mounted) {
-      await _loadPlanningRooms();
+      await _loadRooms();
       
-      // 새로 생성된 방이 있다면 해당 방으로 이동
       if (result != null && result is PlanningRoom) {
         final participantCount = _participantCounts[result.roomId] ?? 0;
         if (mounted) {
@@ -139,13 +152,27 @@ class _MeetingPageState extends State<MeetingPage> {
   }
   
   // 모임 만들기 페이지로 이동하는 메서드
-  void _navigateToCreateClubPage() {
-    context.push('/create-club');
+  void _navigateToCreateMeetingPage() async {
+    final result = await context.push('/create-meeting');
+    
+    if (mounted) {
+      await _loadRooms();
+      
+      if (result != null && result is MeetingRoom) {
+        final participantCount = _participantCounts[result.roomId] ?? 0;
+        if (mounted) {
+          context.push('/meeting/room', extra: {
+            'meetingRoom': result,
+            'participantCount': participantCount,
+            'userId': FirebaseAuth.instance.currentUser?.uid,
+          });
+        }
+      }
+    }
   }
   
-  // 특정 계획 방으로 이동하는 메서드
-  void _navigateToRoomDetail(PlanningRoom room) async {
-    // Firebase에서 현재 사용자 ID 확인 (방에 들어갈 때마다 최신 ID 확인)
+  // 특정 방으로 이동하는 메서드
+  void _navigateToRoomDetail(dynamic room) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     final userId = currentUser?.uid;
     
@@ -156,14 +183,21 @@ class _MeetingPageState extends State<MeetingPage> {
       return;
     }
     
-    // 참가자 수 가져오기
     int participantCount = _participantCounts[room.roomId] ?? 0;
     
-    context.push('/planning/room', extra: {
-      'planningRoom': room,
-      'participantCount': participantCount,
-      'userId': userId,
-    }).then((_) => _loadPlanningRooms());
+    if (_isScheduleSelected) {
+      context.push('/planning/room', extra: {
+        'planningRoom': room,
+        'participantCount': participantCount,
+        'userId': userId,
+      }).then((_) => _loadRooms());
+    } else {
+      context.push('/meeting/room', extra: {
+        'meetingRoom': room,
+        'participantCount': participantCount,
+        'userId': userId,
+      }).then((_) => _loadRooms());
+    }
   }
   
   // 초대 코드 입력 다이얼로그를 표시하는 메서드
@@ -203,17 +237,35 @@ class _MeetingPageState extends State<MeetingPage> {
   // 초대 코드로 방에 참가하는 메서드
   Future<void> _joinRoomWithCode(String code) async {
     try {
+      print('초대코드로 방 참여 시도: $code');
       setState(() => _isLoading = true);
-      final room = await _planningService.joinPlanningRoom(code);
-      setState(() => _isLoading = false);
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('방에 성공적으로 참가했습니다!')),
-        );
-        _loadPlanningRooms(); // 목록 새로고침
+      if (_isScheduleSelected) {
+        print('일정 방 참여 시도');
+        final room = await _planningService.joinPlanningRoom(code);
+        print('일정 방 참여 성공: ${room.roomId}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('일정 방에 성공적으로 참가했습니다!')),
+          );
+        }
+      } else {
+        print('모임 방 참여 시도');
+        final room = await _meetingService.joinMeetingRoom(code);
+        print('모임 방 참여 성공: ${room.roomId}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('모임 방에 성공적으로 참가했습니다!')),
+          );
+        }
       }
+      
+      print('방 목록 새로고침 시작');
+      setState(() => _isLoading = false);
+      await _loadRooms();
+      print('방 목록 새로고침 완료');
     } catch (e) {
+      print('방 참여 실패: $e');
       setState(() {
         _isLoading = false;
         _errorMessage = '방 참가에 실패했습니다: $e';
@@ -273,6 +325,7 @@ class _MeetingPageState extends State<MeetingPage> {
                             setState(() {
                               _isScheduleSelected = true;
                             });
+                            _loadRooms();
                           },
                           child: Container(
                             decoration: BoxDecoration(
@@ -303,6 +356,7 @@ class _MeetingPageState extends State<MeetingPage> {
                             setState(() {
                               _isScheduleSelected = false;
                             });
+                            _loadRooms();
                           },
                           child: Container(
                             decoration: BoxDecoration(
@@ -345,9 +399,9 @@ class _MeetingPageState extends State<MeetingPage> {
                       ? (_planningRooms.isEmpty
                           ? const Center(child: Text('일정 방이 없습니다.'))
                           : _buildRoomsList(_planningRooms))
-                      : (_clubRooms.isEmpty
+                      : (_meetingRooms.isEmpty
                           ? const Center(child: Text('모임 방이 없습니다.'))
-                          : _buildRoomsList(_clubRooms)),
+                          : _buildRoomsList(_meetingRooms)),
               ),
             ),
           ],
@@ -356,10 +410,10 @@ class _MeetingPageState extends State<MeetingPage> {
       floatingActionButton: AddButton(
         items: [
           AddButtonItem(
-            label: '모임 만들기',
-            iconPath: 'assets/images/meetingpng',
-            onPressed: _navigateToCreateClubPage,
-            description: '모임을 만들어 쉽게 공지와 일정을 공유해 보세요',
+            label: '모임방 만들기',
+            iconPath: 'assets/images/meeting.png',
+            onPressed: _navigateToCreateMeetingPage,
+            description: '모임방을 만들어보세요',
           ),
           AddButtonItem(
             label: '일정 잡기',
@@ -372,14 +426,14 @@ class _MeetingPageState extends State<MeetingPage> {
             iconPath: 'assets/images/link.png',
             onPressed: _showInviteCodeDialog,
             description: '일정 잡기 또는 모임 초대코드를 입력해 참가해보세요',
-          )
+          ),
         ],
       ),
     );
   }
   
-  // 방 목록을 표시하는 위젯을 생성하는 메서드 (추출)
-  Widget _buildRoomsList(List<PlanningRoom> rooms) {
+  // 방 목록을 표시하는 위젯을 생성하는 메서드
+  Widget _buildRoomsList(List<dynamic> rooms) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       itemCount: rooms.length,
@@ -387,10 +441,9 @@ class _MeetingPageState extends State<MeetingPage> {
         final room = rooms[index];
         final participantCount = _participantCounts[room.roomId] ?? 0;
         
-        // 방 목록 항목
         return InkWell(
           onTap: () => _navigateToRoomDetail(room),
-          onLongPress: () => _showDeleteRoomDialog(room), // 길게 누를 때 삭제 다이얼로그 표시
+          onLongPress: () => _showDeleteRoomDialog(room),
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -407,7 +460,7 @@ class _MeetingPageState extends State<MeetingPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    room.roomName,
+                    _isScheduleSelected ? room.roomName : room.meetingName,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -439,12 +492,12 @@ class _MeetingPageState extends State<MeetingPage> {
   }
   
   // 방 삭제 다이얼로그 표시
-  void _showDeleteRoomDialog(PlanningRoom room) {
+  void _showDeleteRoomDialog(dynamic room) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('방 삭제'),
-        content: Text('\'${room.roomName}\' 방을 삭제하시겠습니까?'),
+        content: Text('\'${_isScheduleSelected ? room.roomName : room.meetingName}\' 방을 삭제하시겠습니까?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -466,7 +519,7 @@ class _MeetingPageState extends State<MeetingPage> {
   }
   
   // 방 삭제 처리
-  Future<void> _deleteRoom(PlanningRoom room) async {
+  Future<void> _deleteRoom(dynamic room) async {
     if (room.roomId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('방 ID가 유효하지 않습니다.')),
@@ -480,15 +533,17 @@ class _MeetingPageState extends State<MeetingPage> {
     });
     
     try {
-      await _planningService.deletePlanningRoom(room.roomId!);
+      if (_isScheduleSelected) {
+        await _planningService.deletePlanningRoom(room.roomId);
+      } else {
+        await _meetingService.deleteMeetingRoom(room.roomId);
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('방이 삭제되었습니다.')),
         );
-        
-        // 방 목록 새로고침
-        _loadPlanningRooms();
+        _loadRooms();
       }
     } catch (e) {
       if (mounted) {
