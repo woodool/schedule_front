@@ -21,6 +21,8 @@ import '../widgets/main_screen_shell.dart';
 import 'planning_routes.dart';
 import 'meeting_routes.dart';
 import '../../features/schedule/presentation/pages/schedule_search_page.dart';
+import '../../features/common_pages/profile_page.dart';
+import '../../features/common_pages/change_password_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -192,6 +194,18 @@ final goRouter = GoRouter(
         GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsPage(),
+          routes: [
+            GoRoute(
+              path: 'profile',
+              parentNavigatorKey: _rootNavigatorKey,
+              builder: (context, state) => const ProfilePage(),
+            ),
+            GoRoute(
+              path: 'change-password',
+              parentNavigatorKey: _rootNavigatorKey,
+              builder: (context, state) => const ChangePasswordPage(),
+            ),
+          ],
         ),
       ],
     ),
